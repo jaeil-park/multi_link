@@ -7,18 +7,34 @@
 <style>
     body {
         font-family: Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
         padding: 20px;
+    }
+    #search-container {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
+    #search {
+        width: 100%;
+        max-width: 300px; /* 행의 상품 크기와 맞추기 */
+        padding: 10px;
+        box-sizing: border-box;
+    }
+    #products {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
     }
     .product {
         margin: 20px;
         text-align: center;
+        width: calc(50% - 40px); /* 한 줄에 두 개의 상품이 나오도록 설정 */
+        max-width: 300px; /* 최대 너비 설정 */
     }
     .product img {
-        width: 240px; /* 이미지 크기 조정 */
-        height: 240px; /* 이미지 크기 조정 */
+        width: 100%;
+        max-width: 240px; /* 이미지 최대 너비 설정 */
+        height: auto;
         border-radius: 10px; /* 이미지 모서리 둥글게 */
     }
     a {
@@ -29,35 +45,64 @@
 </head>
 <body>
 
-<div class="product">
-    <a href="https://smartstore.naver.com/mbox-store/products/9939474238" target="_blank">
-        <img src="https://shop-phinf.pstatic.net/20240211_127/1707622427253OzUfE_JPEG/KakaoTalk_20240211_122603671.jpg?type=w860" alt="지금을사는지혜">
-        <div>지금을사는지혜</div>
-    </a>
+<div id="search-container">
+    <input type="text" id="search" placeholder="검색어를 입력하세요">
 </div>
 
-<div class="product">
-    <a href="https://smartstore.naver.com/mbox-store/products/10151471413" target="_blank">
-        <img src="https://shop-phinf.pstatic.net/20240401_299/1711982408274B904h_JPEG/1000005283.jpg?type=w860" alt="지금안으로 글쓰기">
-        <div>지금안으로 글쓰기</div>
-    </a>
+<div id="products">
+    <div class="product">
+        <a href="https://smartstore.naver.com/mbox-store/products/9939474238" target="_blank">
+            <img src="https://shop-phinf.pstatic.net/20240211_127/1707622427253OzUfE_JPEG/KakaoTalk_20240211_122603671.jpg?type=w860" alt="지금을사는지혜">
+            <div>지금을사는지혜</div>
+        </a>
+    </div>
+    <div class="product">
+        <a href="https://smartstore.naver.com/mbox-store/products/10151471413" target="_blank">
+            <img src="https://shop-phinf.pstatic.net/20240401_299/1711982408274B904h_JPEG/1000005283.jpg?type=w860" alt="지금안으로 글쓰기">
+            <div>지금안으로 글쓰기</div>
+        </a>
+    </div>
+    <div class="product">
+        <a href="https://service.toss.im/shopping/p/420585" target="_blank">
+            <img src="https://bananab2b.co.kr/data/bananab2b/goods/bananaqhick/big/202320652538688649286.jpg?type=w860" alt="레디백">
+            <div>레디백</div>
+        </a>
+    </div>
+    <div class="product">
+        <a href="https://service.toss.im/shopping/p/420585" target="_blank">
+            <img src="https://shop-phinf.pstatic.net/20240108_96/1704707361504tW8My_JPEG/105843145221677118_890552068.jpg?type=w860" alt="스마트스토어">
+            <div>스마트스토어</div>
+        </a>
+    </div>
+    <div class="product">
+        <a href="https://shop.coupang.com/mboxstore" target="_blank">
+            <img src="https://shop-phinf.pstatic.net/20240108_96/1704707361504tW8My_JPEG/105843145221677118_890552068.jpg?type=w860" alt="쿠팡마이샵">
+            <div>쿠팡마이샵</div>
+        </a>
+    </div>
+    <div class="product">
+        <a href="https://store.kakao.com/mbox" target="_blank">
+            <img src="https://shop-phinf.pstatic.net/20240108_96/1704707361504tW8My_JPEG/105843145221677118_890552068.jpg?type=w860" alt="카카오톡스토어">
+            <div>카카오톡스토어</div>
+        </a>
+    </div>
+    <!-- 추가 상품 링크 -->
 </div>
 
-<div class="product">
-    <a href="https://service.toss.im/shopping/p/420585" target="_blank">
-        <img src="https://bananab2b.co.kr/data/bananab2b/goods/bananaqhick/big/202320652538688649286.jpg?type=w860" alt="레디백">
-        <div>레디백</div>
-    </a>
-</div>
-
-<div class="product">
-    <a href="https://smartstore.naver.com/mbox-store" target="_blank">
-        <img src="https://shop-phinf.pstatic.net/20240108_96/1704707361504tW8My_JPEG/105843145221677118_890552068.jpg?type=w860" alt="스마트스토어">
-        <div>스마트스토어</div>
-    </a>
-</div>
-
-<!-- 추가 상품 링크 -->
+<script>
+    document.getElementById('search').addEventListener('input', function() {
+        var searchValue = this.value.toLowerCase();
+        var products = document.querySelectorAll('.product');
+        products.forEach(function(product) {
+            var productName = product.textContent.toLowerCase();
+            if (productName.indexOf(searchValue) > -1) {
+                product.style.display = 'block';
+            } else {
+                product.style.display = 'none';
+            }
+        });
+    });
+</script>
 
 </body>
 </html>
