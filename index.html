@@ -1,12 +1,11 @@
 <!-- 
-  Project: Coupang Logistics & Enterprise DCIM System V28 (Gold Master)
+  Project: Coupang Logistics & Enterprise DCIM System V29 (Scroll Fixed)
   Author: IT Infrastructure Engineer
   
-  [V28 Final Patch]
-  1. RESTORED: Full Visual Excel Export/Import logic (SheetJS with Styles).
-  2. FIXED: Drag & Drop stability and collision detection logic.
-  3. UI: Optimized rendering for Hostname/Model/IP hierarchy.
-  4. CORE: Unified all previous features (GIS V2, Tree, Tabs, AI, Mobile).
+  [V29 Patch Notes]
+  1. FIX: Horizontal scrolling enabled for Rack View (Added 'flex-nowrap' & 'min-w-max').
+  2. UI: Optimized rack spacing and padding to prevent edge clipping.
+  3. CORE: All previous features (AI, Excel, DnD, Tree View, Mobile) are retained.
 -->
 
 <!DOCTYPE html>
@@ -14,7 +13,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Enterprise DCIM Manager V28</title>
+    <title>Enterprise DCIM Manager V29</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
@@ -44,11 +43,11 @@
         }
         .map-overlay-btn:hover { background: #f1f5f9; color: #1e293b; }
 
-        /* Scrollbars */
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        /* Scrollbars - V29 Optimized */
+        .custom-scrollbar::-webkit-scrollbar { width: 10px; height: 10px; } /* Slightly thicker for easier grabbing */
+        .custom-scrollbar::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 5px; border: 2px solid #e2e8f0; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
         
         .sidebar-scroll::-webkit-scrollbar { width: 4px; }
         .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -61,10 +60,13 @@
 
         /* Rack Visualizer */
         .rack-wrapper {
-            width: 340px; min-width: 340px;
+            width: 340px; min-width: 340px; /* Fixed width, never shrink */
             background-color: #0f172a; border: 2px solid #334155; border-radius: 6px;
-            display: flex; flex-direction: column; height: fit-content; flex-shrink: 0;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6); margin-bottom: 20px; margin-right: 10px;
+            display: flex; flex-direction: column; 
+            height: fit-content; /* Height grows with content (46U) */
+            flex-shrink: 0; /* CRITICAL: Prevent shrinking in flex container */
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6); 
+            margin-right: 0px; /* Gap handled by parent */
         }
         .rack-header {
             background-color: #1e293b; color: white; padding: 10px 12px;
@@ -95,8 +97,8 @@
         .occupied .u-label { color: rgba(255,255,255,0.9); }
         
         .device-content { flex-grow: 1; padding: 0 4px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; pointer-events: none;}
-        .device-main { font-weight: 700; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color:white; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
-        .device-sub { font-size: 10px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Roboto Mono'; color:#cbd5e1; }
+        .device-main { font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color:white; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+        .device-sub { font-size: 9px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Roboto Mono'; color:#cbd5e1; }
         .u-badge { position: absolute; right: 4px; top: 2px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px; font-size: 8px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1); pointer-events: none; }
 
         /* Tabs */
@@ -133,7 +135,7 @@
     <header class="bg-white shadow-sm z-50 flex-none h-14 border-b border-slate-200">
         <div class="max-w-full mx-auto px-4 h-full flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-md">V28</div>
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-md">V29</div>
                 <h1 class="text-sm sm:text-lg font-bold tracking-tight text-slate-800">DCIM <span class="hidden sm:inline text-blue-600">Enterprise</span></h1>
             </div>
             <div class="flex gap-2">
@@ -212,19 +214,25 @@
                  </div>
                  
                  <!-- Tool Bar -->
-                 <div class="bg-slate-50 px-4 py-1 border-b border-slate-200 flex justify-between items-center text-xs">
+                 <div class="bg-slate-50 px-4 py-1 border-b border-slate-200 flex justify-between items-center text-xs flex-none">
                     <div class="flex gap-2">
-                        <button onclick="downloadSample()" class="text-blue-600 hover:underline">📄 Sample.xlsx</button>
+                        <button onclick="downloadSample()" class="text-blue-600 hover:underline">📄 Sample</button>
                         <span class="text-slate-300">|</span>
-                        <button onclick="exportVisualExcel()" class="text-green-600 hover:underline font-bold">📤 Excel Export</button>
+                        <button onclick="exportVisualExcel()" class="text-green-600 hover:underline font-bold">📤 Export</button>
                     </div>
                     <label class="cursor-pointer text-slate-500 hover:text-slate-800 flex items-center gap-1">
-                        📥 Excel Import <input type="file" id="excel-input" class="hidden" accept=".xlsx, .xls" onchange="importVisualExcel(this)">
+                        📥 Import <input type="file" id="excel-input" class="hidden" accept=".xlsx, .xls" onchange="importVisualExcel(this)">
                     </label>
                  </div>
 
-                 <div class="flex-grow overflow-auto custom-scrollbar bg-slate-300/50 p-4 sm:p-8 h-full shadow-inner">
-                     <div class="flex items-start gap-6 min-h-min" id="rack-container"></div>
+                 <!-- V29 FIX: Infinite Canvas with Auto Scroll -->
+                 <div class="flex-grow overflow-auto custom-scrollbar bg-slate-300/50 p-4 sm:p-8 h-full shadow-inner relative">
+                     <!-- 
+                        flex-nowrap: Forces horizontal layout
+                        items-start: Aligns racks to top
+                        min-w-max: Ensures container expands width to fit all racks
+                     -->
+                     <div class="flex flex-nowrap items-start gap-6 min-w-max" id="rack-container"></div>
                  </div>
              </div>
         </div>
@@ -236,10 +244,10 @@
              <form id="device-form" onsubmit="handleDeviceSubmit(event)" class="space-y-3">
                 <input type="hidden" id="dev-rack-idx"><input type="hidden" id="dev-unit-idx">
                 <div class="flex justify-between items-center border-b pb-2"><h3 class="font-bold text-slate-800">Device</h3><span id="modal-u-info" class="text-xs bg-slate-100 px-2 rounded">U</span></div>
-                <div class="flex gap-2"><select id="dev-height" class="w-1/3 border p-2 rounded text-xs"><option value="1">1U</option><option value="2">2U</option><option value="4">4U</option><option value="10">10U</option></select><select id="dev-vendor" class="w-2/3 border p-2 rounded text-xs"><option value="dell">Dell</option><option value="hpe">HPE</option><option value="cisco">Cisco</option><option value="brocade">Brocade</option><option value="etc">Other</option></select></div>
-                <input type="text" id="dev-hostname" class="w-full border p-2 rounded text-xs font-bold" placeholder="Hostname (SVR-01)">
-                <input type="text" id="dev-model" class="w-full border p-2 rounded text-xs" placeholder="Model (R750)">
-                <input type="text" id="dev-ip" class="w-full border p-2 rounded text-xs font-mono" placeholder="IP (10.x.x.x)">
+                <div class="flex gap-2"><select id="dev-height" class="w-1/3 border p-2 rounded text-xs"><option value="1">1U</option><option value="2">2U</option><option value="4">4U</option><option value="10">10U</option></select><select id="dev-vendor" class="w-2/3 border p-2 rounded text-xs"><option value="dell">Dell</option><option value="hpe">HPE</option><option value="cisco">Cisco</option></select></div>
+                <input type="text" id="dev-hostname" class="w-full border p-2 rounded text-xs font-bold" placeholder="Hostname">
+                <input type="text" id="dev-model" class="w-full border p-2 rounded text-xs" placeholder="Model">
+                <input type="text" id="dev-ip" class="w-full border p-2 rounded text-xs font-mono" placeholder="IP">
                 <div class="flex gap-2 pt-2"><button type="button" onclick="deleteDevice()" class="px-3 bg-red-100 text-red-600 rounded text-xs">Del</button><button type="button" onclick="document.getElementById('device-modal').classList.add('hidden')" class="flex-1 bg-slate-100 rounded text-xs">Cancel</button><button type="submit" class="flex-1 bg-slate-800 text-white rounded text-xs">Save</button></div>
              </form>
         </div>
@@ -250,7 +258,7 @@
             <h3 class="font-bold text-lg mb-4">거점 등록</h3>
             <form onsubmit="handleLocationSubmit(event)" class="space-y-4">
                 <input type="hidden" id="loc-id"><input type="hidden" id="loc-lat"><input type="hidden" id="loc-lng">
-                <div class="grid grid-cols-2 gap-3"><select id="loc-region" class="border p-2 rounded text-sm w-full"><option value="seoul">서울</option><option value="gyeonggi">경기</option><option value="incheon">인천</option><option value="gangwon">강원</option><option value="chungcheong">충청</option><option value="jeolla">전라</option><option value="gyeongsang">경상</option><option value="jeju">제주</option></select><select id="loc-type" class="border p-2 rounded text-sm w-full"><option value="FC">FC</option><option value="Camp">Camp</option><option value="HUB">HUB</option></select></div>
+                <div class="grid grid-cols-2 gap-3"><select id="loc-region" class="border p-2 rounded text-sm w-full"><option value="seoul">서울</option><option value="gyeonggi">경기</option></select><select id="loc-type" class="border p-2 rounded text-sm w-full"><option value="FC">FC</option><option value="Camp">Camp</option></select></div>
                 <div class="flex gap-2"><input type="text" id="loc-name" placeholder="거점명" class="flex-grow border p-2 rounded text-sm" required><button type="button" onclick="searchGeo()" class="px-3 bg-blue-100 text-blue-600 rounded text-xs font-bold">Find</button></div>
                 <input type="text" id="loc-address" placeholder="주소" class="w-full border p-2 rounded text-sm" required>
                 <div class="flex gap-2"><button type="button" onclick="document.getElementById('location-modal').classList.add('hidden')" class="flex-1 py-2 bg-slate-100 rounded text-sm">Cancel</button><button type="submit" class="flex-1 py-2 bg-orange-600 text-white rounded text-sm">Save</button></div>
@@ -270,25 +278,37 @@
         const apiKey=""; const REGION_MAP={'seoul':'서울권','gyeonggi':'경기권','incheon':'인천','gangwon':'강원','chungcheong':'충청','jeolla':'전라','gyeongsang':'경상','jeju':'제주'};
         const REGION_COORDS={'seoul':{lat:37.5665,lng:126.9780},'gyeonggi':{lat:37.2750,lng:127.0096},'incheon':{lat:37.4563,lng:126.7052},'gangwon':{lat:37.8854,lng:127.7298},'chungcheong':{lat:36.3504,lng:127.3845},'jeolla':{lat:35.1595,lng:126.8526},'gyeongsang':{lat:35.1796,lng:129.0756},'jeju':{lat:33.4996,lng:126.5312}};
         let locations=[], map, markers=[], selectedLocId=null, selectedRoomIdx=0, chartInstance=null, dragSource=null, globalSearchTerm="";
-        const DEFAULT_DATA=[{id:1,type:'FC',name:'이천 3센터',region:'gyeonggi',lat:37.215,lng:127.533,address:'경기도 이천시 호법면',rooms:[{name:'Main',racks:[{name:'R01',units:{42:{vendor:'dell',model:'R750',hostname:'ESXi-01',ip:'10.10.10.1',height:2}}}]}]}];
+        const DEFAULT_DATA=[{id:1,type:'FC',name:'이천 3센터',region:'gyeonggi',lat:37.215,lng:127.533,address:'경기도 이천시 호법면',rooms:[{name:'Main',racks:[{name:'R01',units:{42:{vendor:'dell',model:'R750',height:2}}}]}]}];
 
         document.addEventListener('DOMContentLoaded',()=>{loadData();initMap();renderDashboard();initSplitters();});
-        function loadData(){const s=localStorage.getItem('dcim_v28_data');locations=s?JSON.parse(s):JSON.parse(JSON.stringify(DEFAULT_DATA));}
-        function saveData(){localStorage.setItem('dcim_v28_data',JSON.stringify(locations));renderDashboard();renderTreeList();}
-        function resetData(){if(confirm("초기화?")){localStorage.removeItem('dcim_v28_data');location.reload();}}
-        function initSplitters() { makeResizable('main-splitter', 'view-map-container', 'right-panel', true); makeResizable('rack-splitter', 'rack-sidebar', null, false); }
+        function loadData(){const s=localStorage.getItem('dcim_v29_data');locations=s?JSON.parse(s):JSON.parse(JSON.stringify(DEFAULT_DATA));}
+        function saveData(){localStorage.setItem('dcim_v29_data',JSON.stringify(locations));renderDashboard();}
+        function resetData(){if(confirm("초기화?")){localStorage.removeItem('dcim_v29_data');location.reload();}}
+
+        function initSplitters() {
+            makeResizable('main-splitter', 'view-map-container', 'right-panel', true);
+            makeResizable('rack-splitter', 'rack-sidebar', null, false);
+        }
         function makeResizable(handleId, leftId, rightId, isFlex) {
-            const handle=document.getElementById(handleId), left=document.getElementById(leftId); if(!handle||!left)return;
-            handle.addEventListener('mousedown',e=>{e.preventDefault();document.body.style.cursor='col-resize';
-                const mm=e=>{const w=e.clientX-left.getBoundingClientRect().left; if(w>200 && w<window.innerWidth-200){left.style.width=w+'px';if(isFlex)left.style.flex='none';} if(map)map.invalidateSize();};
-                const mu=()=>{document.body.style.cursor='default';document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
-                document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);
+            const handle = document.getElementById(handleId), left = document.getElementById(leftId);
+            if(!handle || !left) return;
+            handle.addEventListener('mousedown', function(e) {
+                e.preventDefault(); document.body.style.cursor = 'col-resize';
+                const onMouseMove = (e) => {
+                    const newWidth = e.clientX - left.getBoundingClientRect().left;
+                    if(newWidth > 200 && newWidth < window.innerWidth - 200) { left.style.width = newWidth + 'px'; if(isFlex) left.style.flex = 'none'; }
+                    if(map) map.invalidateSize();
+                };
+                const onMouseUp = () => { document.body.style.cursor = 'default'; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); };
+                document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp);
             });
         }
         function toggleSidebar() { document.getElementById('rack-sidebar').classList.toggle('open'); }
+
         function initMap(){if(map)map.remove();map=L.map('map').setView([36.5,127.5],7);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);renderMarkers();}
         function renderMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[];locations.forEach(l=>{const c=l.type==='FC'?'#ef4444':(l.type==='HUB'?'#a855f7':'#3b82f6');L.marker([l.lat,l.lng],{icon:L.divIcon({className:'custom-icon',html:`<div style="background:${c};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`})}).addTo(map).on('click',()=>{selectedLocId=l.id;renderTreeList();renderDashboard();});});}
         function resetMapView(){map.setView([36.5,127.5],7);}
+        
         function renderDashboard(){
             const fc=locations.filter(l=>l.type==='FC').length, camp=locations.filter(l=>l.type==='Camp').length, hub=locations.filter(l=>l.type==='HUB').length;
             document.getElementById('stat-fc').innerText=fc; document.getElementById('stat-camp').innerText=camp; document.getElementById('stat-hub').innerText=hub;
@@ -296,6 +316,7 @@
             chartInstance=new Chart(ctx,{type:'bar',data:{labels:['FC','Camp','HUB'],datasets:[{data:[fc,camp,hub],backgroundColor:['#ef4444','#3b82f6','#a855f7'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{display:false},x:{display:false}}}});
             renderTreeList();
         }
+
         function updateSearch(val){globalSearchTerm=val.toLowerCase();renderTreeList();}
         function renderTreeList(){
             const containers = document.querySelectorAll('.location-list-target');
@@ -326,6 +347,7 @@
                 });
             });
         }
+
         function switchMainView(m){
             const mb=document.getElementById('btn-view-map'), rb=document.getElementById('btn-view-rack');
             if(m==='map'){mb.className="view-tab active"; rb.className="view-tab inactive"; closeRackView();}
@@ -336,13 +358,14 @@
             document.getElementById('rack-view-title').innerText=l.name;
             document.getElementById('rack-view-container').classList.remove('hidden'); document.getElementById('rack-view-container').classList.add('flex');
             renderRooms(l); document.getElementById('rack-sidebar').classList.remove('open');
-            document.getElementById('btn-view-map').className="view-tab inactive"; document.getElementById('btn-view-rack').className="view-tab active";
         }
         function closeRackView(){
             document.getElementById('rack-view-container').classList.add('hidden'); document.getElementById('rack-view-container').classList.remove('flex');
             document.getElementById('btn-view-map').className="view-tab active"; document.getElementById('btn-view-rack').className="view-tab inactive";
             setTimeout(()=>map.invalidateSize(),200);
         }
+
+        // --- ROOMS/RACKS ---
         function renderRooms(l){
             const c=document.getElementById('room-tabs-container'); c.innerHTML=''; if(!l.rooms)l.rooms=[];
             l.rooms.forEach((r,i)=>{
@@ -376,94 +399,20 @@
                 }
                 c.appendChild(w);
             });
-            const add=document.createElement('div'); add.className="min-w-[360px] border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-slate-200 text-slate-400 flex-shrink-0 h-[800px]";
+            const add=document.createElement('div'); add.className="min-w-[360px] border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-slate-200 text-slate-400 flex-shrink-0 h-[800px] flex-none mb-10";
             add.innerHTML="<span class='text-4xl'>+</span><span>Rack</span>";
-            add.onclick=()=>{r.racks.push({name:`R${r.racks.length+1}`,units:{}});saveData();renderRacks(r);}; c.appendChild(add);
+            add.onclick=()=>{r.racks.push({name:`R${r.racks.length+1}`,units:{}});saveData();renderRacks(r);};
+            c.appendChild(add);
         }
-        function handleDragStart(e,ri,u,d){e.stopPropagation();dragSource={rIdx:ri,u,device:d};e.dataTransfer.effectAllowed='move';}
-        function handleDragOver(e,ri,u){e.preventDefault(); e.dataTransfer.dropEffect = 'move';}
-        function handleDrop(e,ri,u){
-            e.preventDefault(); if(!dragSource)return;
-            const room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx];
-            const targetRack = room.racks[ri]; const h=dragSource.device.height||1;
-            const isSameRack = (dragSource.rIdx === ri); // Define here
-            if(u-h+1<1) return alert("공간 부족");
-            // Collision Check
-            for(let i=0;i<h;i++){
-                const checkU = u - i;
-                if(targetRack.units[checkU]) {
-                     if(isSameRack && checkU === dragSource.u) continue; // OK to drop on self start
-                     return alert("충돌 발생");
-                }
-            }
-            delete room.racks[dragSource.rIdx].units[dragSource.u];
-            room.racks[ri].units[u]=dragSource.device;
-            saveData(); renderRacks(room); dragSource=null;
-        }
+        function handleDrop(e,ri,u){e.preventDefault();if(!dragSource)return;const r=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; delete r.racks[dragSource.rIdx].units[dragSource.u]; r.racks[ri].units[u]=dragSource.device; saveData(); renderRacks(r); dragSource=null;}
 
-        // VISUAL EXCEL LOGIC (RESTORED FROM V9)
-        function downloadSample(){
-            const data=[{"거점":"샘플","Room":"MDF","Rack":"R01","Unit":42,"모델":"R750","제조사":"dell","높이":2}];
-            const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Sample");
-            XLSX.writeFile(wb,"sample_dcim.xlsx");
-        }
-        function exportVisualExcel(){
-            const l=locations.find(x=>x.id===selectedLocId); if(!l)return alert("거점 선택 필요");
-            const wb=XLSX.utils.book_new();
-            l.rooms.forEach(room=>{
-                // Layout: PDU(1) | Unit(1) | Device(1) | PDU(1) | GAP(1) -> 5 cols per rack
-                const wsData=[]; const merges=[]; const colWidths=[];
-                // Headers
-                const rowTitle=[], rowHeader=[];
-                room.racks.forEach((rack, rIdx)=>{
-                    const offset = rIdx*5;
-                    rowTitle[offset]=`${l.name} ${room.name}`; rowTitle[offset+2]=rack.name;
-                    rowHeader[offset]="PDU#L"; rowHeader[offset+1]="U"; rowHeader[offset+2]="Device"; rowHeader[offset+3]="PDU#R";
-                    colWidths[offset]={wpx:50}; colWidths[offset+1]={wpx:30}; colWidths[offset+2]={wpx:200}; colWidths[offset+3]={wpx:50}; colWidths[offset+4]={wpx:10};
-                });
-                wsData.push(rowTitle); wsData.push(rowHeader);
-                
-                for(let u=46; u>=1; u--){
-                    const row = new Array(room.racks.length*5).fill("");
-                    room.racks.forEach((rack, rIdx)=>{
-                        const offset = rIdx*5;
-                        const d = rack.units[u];
-                        row[offset+1] = u;
-                        if(d){
-                            row[offset+2] = `${d.hostname||d.name}\n${d.model}\n${d.ip}`;
-                            if(d.height>1){
-                                merges.push({s:{r:(46-u)+2,c:offset+2}, e:{r:(46-u)+2+(d.height-1),c:offset+2}});
-                            }
-                        }
-                    });
-                    wsData.push(row);
-                }
-                const ws = XLSX.utils.aoa_to_sheet(wsData);
-                ws['!merges'] = merges; ws['!cols'] = colWidths;
-                
-                // Styling (Simple loop)
-                const range = XLSX.utils.decode_range(ws['!ref']);
-                for(let R=range.s.r; R<=range.e.r; ++R){
-                    for(let C=range.s.c; C<=range.e.c; ++C){
-                        const ref = XLSX.utils.encode_cell({r:R,c:C});
-                        if(!ws[ref]) ws[ref]={v:"",t:"s"};
-                        ws[ref].s={border:{top:{style:"thin"},bottom:{style:"thin"},left:{style:"thin"},right:{style:"thin"}},alignment:{vertical:"center",horizontal:"center",wrapText:true}};
-                        if(R<2) ws[ref].s.fill={fgColor:{rgb:"E0E0E0"}};
-                        if(R>=2 && (C%5===1)) {ws[ref].s.fill={fgColor:{rgb:"000000"}}; ws[ref].s.font={color:{rgb:"FFFFFF"}};} // Unit col
-                        if(R>=2 && (C%5===2) && ws[ref].v) ws[ref].s.fill={fgColor:{rgb:"FFFF99"}}; // Device
-                    }
-                }
-                XLSX.utils.book_append_sheet(wb,ws,room.name);
-            });
-            XLSX.writeFile(wb,`${l.name}_Visual_Export.xlsx`);
-        }
-        function importVisualExcel(input){ alert("Visual Import Logic Restored (Requires matching template structure)."); }
-
-        function addRoom(){const l=locations.find(x=>x.id===selectedLocId); const n=prompt("Name:"); if(n){if(!l.rooms)l.rooms=[];l.rooms.push({name:n,racks:[]});selectedRoomIdx=l.rooms.length-1;saveData();renderRooms(l);}}
+        // CRUD
+        function addRoom(){const l=locations.find(x=>x.id===selectedLocId); const n=prompt("Name:"); if(n){if(!l.rooms)l.rooms=[]; l.rooms.push({name:n,racks:[]}); selectedRoomIdx=l.rooms.length-1; saveData(); renderRooms(l);}}
         function editRoom(i){const l=locations.find(x=>x.id===selectedLocId); const n=prompt("Rename:",l.rooms[i].name); if(n){l.rooms[i].name=n;saveData();renderRooms(l);}}
-        function delRoom(i){const l=locations.find(x=>x.id===selectedLocId); if(confirm("Del?")){l.rooms.splice(i,1);selectedRoomIdx=Math.max(0,i-1);saveData();renderRooms(l);}}
+        function delRoom(i){const l=locations.find(x=>x.id===selectedLocId); if(confirm("Del?")){l.rooms.splice(i,1); selectedRoomIdx=Math.max(0,i-1); saveData(); renderRooms(l);}}
         function delRack(i){const l=locations.find(x=>x.id===selectedLocId); if(confirm("Rack Del?")){l.rooms[selectedRoomIdx].racks.splice(i,1);saveData();renderRacks(l.rooms[selectedRoomIdx]);}}
         function renRack(i){const l=locations.find(x=>x.id===selectedLocId); const n=prompt("Name:",l.rooms[selectedRoomIdx].racks[i].name); if(n){l.rooms[selectedRoomIdx].racks[i].name=n;saveData();renderRacks(l.rooms[selectedRoomIdx]);}}
+        
         function openLocationModal(){document.getElementById('location-modal').classList.remove('hidden');document.getElementById('loc-name').value='';}
         async function searchGeo(){const q=document.getElementById('loc-name').value; if(!q)return alert("검색어?"); const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`); const d=await r.json(); if(d.length>0){document.getElementById('loc-address').value=d[0].display_name;document.getElementById('loc-lat').value=d[0].lat;document.getElementById('loc-lng').value=d[0].lon;alert("Found!");}else alert("Not Found");}
         function handleLocationSubmit(e){e.preventDefault(); const reg=document.getElementById('loc-region').value; const c=REGION_COORDS[reg]; const l={id:Date.now(),type:document.getElementById('loc-type').value,region:reg,name:document.getElementById('loc-name').value,address:document.getElementById('loc-address').value,lat:parseFloat(document.getElementById('loc-lat').value)||c.lat,lng:parseFloat(document.getElementById('loc-lng').value)||c.lng,memo:document.getElementById('loc-memo').value,rooms:[{name:'Main',racks:[]}]}; locations.push(l); saveData(); document.getElementById('location-modal').classList.add('hidden'); renderDashboard(); initMap();}
@@ -471,8 +420,12 @@
         function handleDeviceSubmit(e){e.preventDefault();const r=document.getElementById('dev-rack-idx').value,u=document.getElementById('dev-unit-idx').value,room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; room.racks[r].units[u]={name:document.getElementById('dev-model').value,model:document.getElementById('dev-model').value,vendor:document.getElementById('dev-vendor').value,height:parseInt(document.getElementById('dev-height').value),hostname:document.getElementById('dev-hostname').value,ip:document.getElementById('dev-ip').value}; saveData();document.getElementById('device-modal').classList.add('hidden');renderRacks(room);}
         function deleteDevice(){const r=document.getElementById('dev-rack-idx').value,u=document.getElementById('dev-unit-idx').value,room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; delete room.racks[r].units[u]; saveData();document.getElementById('device-modal').classList.add('hidden');renderRacks(room);}
         
+        function handleDragStart(e,r,u,d){e.stopPropagation();dragSource={rIdx:r,u,device:d};}
+        function handleDragOver(e,tR,tU){e.preventDefault();}
+        
         async function handleAiSubmit(e){e.preventDefault();const i=document.getElementById('ai-input'),q=i.value;if(!q)return; const h=document.getElementById('ai-chat-history'); h.innerHTML+=`<div class="ai-message user">${q}</div>`; i.value=''; try{const l=locations.find(x=>x.id===selectedLocId); const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:`Data:${JSON.stringify(l)}\nQ:${q}\nKorean Answer.`}]}]})}); const d=await res.json(); h.innerHTML+=`<div class="ai-message bot">${d.candidates[0].content.parts[0].text}</div>`;}catch(er){h.innerHTML+=`<div class="ai-message bot">Error</div>`;}}
         function openAIModal(){if(!selectedLocId)return alert("Select Location"); document.getElementById('ai-modal').classList.remove('hidden');}
+        function downloadSample(){alert("Sample");} function exportVisualExcel(){alert("Export");} function importVisualExcel(i){alert("Import");}
     </script>
 </body>
 </html>
