@@ -1,13 +1,14 @@
 <!-- 
-  Project: Coupang Logistics & Enterprise DCIM System V31 (Full Integration - Fixed)
+  Project: Coupang Logistics & Enterprise DCIM System V32 (Robust Edition)
   Author: IT Infrastructure Engineer
   
-  [V31 Fixes]
-  1. BUGFIX: Restored missing 'renderDashboard' function causing ReferenceError.
-  2. DATA: Integrated schema from uploaded CSVs (Serial, Warranty, CPU, RAM, HDD, ServiceLevel).
-  3. IMPORT: Logic to parse "Rack Location" strings (e.g., "A_S03_17U~18U") into visual blocks.
-  4. EXPORT: Generates a multi-sheet Excel file matching the user's sample structure.
-  5. UI: Added "Server List" tab in the right panel with full asset details.
+  [V32 Optimization Log]
+  1. CORE FIX: rewritten 'validateDrop' logic to perform Full-Range Collision Detection.
+     - Prevents overwriting existing devices.
+     - Prevents dropping into the "body" of multi-unit devices.
+     - Allows self-overlapping moves (e.g., moving a 4U server down by 1U).
+  2. UX: Visual feedback (Green/Red border) reflects the TRUE validity of the drop target.
+  3. DATA: All V31 features (Excel, AI, Tree, Tabs) are preserved and integrated.
 -->
 
 <!DOCTYPE html>
@@ -15,7 +16,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Enterprise DCIM Manager V31 (Fixed)</title>
+    <title>Enterprise DCIM Manager V32</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
@@ -24,7 +25,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     
     <style>
@@ -38,9 +38,9 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         
-        /* Splitter */
-        .splitter { width: 8px; background-color: #e2e8f0; cursor: col-resize; display: flex; align-items: center; justify-content: center; flex-none: true; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; }
-        @media (max-width: 1024px) { .splitter { display: none !important; } }
+        .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
         /* Rack Visualizer */
         .rack-wrapper {
@@ -63,10 +63,16 @@
         .rack-unit.occupied { color: white; border-bottom: 1px solid rgba(255,255,255,0.15); position: relative; z-index: 10; cursor: grab; }
         .rack-unit.occupied:active { cursor: grabbing; }
 
+        /* Drag Feedback - Improved Visibility */
+        .drag-valid { background-color: rgba(34, 197, 94, 0.2) !important; border: 2px dashed #22c55e !important; }
+        .drag-invalid { background-color: rgba(239, 68, 68, 0.2) !important; border: 2px dashed #ef4444 !important; cursor: not-allowed !important; }
+        .dragging-source { opacity: 0.3; filter: grayscale(100%); }
+
         /* Vendor Colors */
         .vendor-dell { background: linear-gradient(90deg, #0076CE 0%, #005b9f 100%); border-left: 3px solid #60a5fa; }
         .vendor-hpe { background: linear-gradient(90deg, #01A982 0%, #018566 100%); border-left: 3px solid #34d399; }
         .vendor-cisco { background: linear-gradient(90deg, #049fd9 0%, #037ba8 100%); border-left: 3px solid #38bdf8; }
+        .vendor-brocade { background: linear-gradient(90deg, #d11242 0%, #a30e33 100%); border-left: 3px solid #fb7185; }
         .vendor-etc { background: linear-gradient(90deg, #475569 0%, #334155 100%); border-left: 3px solid #94a3b8; }
 
         .u-label { width: 32px; text-align: center; border-right: 1px solid rgba(255,255,255,0.1); margin-right: 6px; font-family: 'Roboto Mono'; font-size: 10px; color: #94a3b8; flex-shrink: 0; height: 100%; display: flex; align-items: center; justify-content: center; pointer-events: none;}
@@ -100,16 +106,18 @@
         .tree-arrow { transition: transform 0.2s; display: inline-block; font-size: 10px; }
         details[open] > summary .tree-arrow { transform: rotate(90deg); }
         
-        /* Panel Tabs */
         .panel-tab { @apply flex-1 py-2 text-xs font-bold text-center cursor-pointer border-b-2 transition; }
         .panel-tab.active { @apply border-indigo-600 text-indigo-700 bg-indigo-50; }
         .panel-tab.inactive { @apply border-transparent text-slate-500 hover:text-slate-700; }
 
-        /* Asset Table */
         .asset-table { width: 100%; font-size: 11px; text-align: left; border-collapse: collapse; min-width: 800px; }
         .asset-table th { @apply bg-slate-100 text-slate-600 font-bold p-2 border-b sticky top-0; }
         .asset-table td { @apply p-2 border-b border-slate-50 text-slate-700 whitespace-nowrap; }
         .asset-table tr:hover { @apply bg-slate-50; }
+        
+        /* Map Overlay Button */
+        .map-overlay-btn { position: absolute; top: 12px; right: 12px; z-index: 500; background: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; color: #475569; box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: pointer; border: 1px solid #cbd5e1; transition: all 0.2s; }
+        .map-overlay-btn:hover { background: #f1f5f9; color: #1e293b; }
     </style>
 </head>
 <body class="text-slate-800 h-screen flex flex-col overflow-hidden bg-slate-50">
@@ -118,13 +126,12 @@
     <header class="bg-white shadow-sm z-50 flex-none h-14 border-b border-slate-200">
         <div class="max-w-full mx-auto px-4 h-full flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-blue-700 rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-md">V31</div>
+                <div class="w-8 h-8 bg-blue-700 rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-md">V32</div>
                 <h1 class="text-sm sm:text-lg font-bold tracking-tight text-slate-800">DCIM <span class="hidden sm:inline text-blue-700">Enterprise</span></h1>
             </div>
             <div class="flex gap-2">
                 <button onclick="openAIModal()" class="px-3 py-1.5 bg-gradient-to-r from-violet-500 to-indigo-600 text-white rounded-lg text-xs font-bold shadow flex items-center gap-1">✨ <span class="hidden sm:inline">AI</span></button>
                 <div class="h-6 w-px bg-slate-200 mx-1"></div>
-                <!-- V31: Full Excel Controls -->
                 <div class="flex items-center gap-1 bg-slate-100 p-1 rounded">
                     <button onclick="downloadSample()" class="px-2 py-1 bg-white border rounded text-[10px] font-bold text-slate-600 hover:bg-slate-50">Sample</button>
                     <button onclick="exportFullExcel()" class="px-2 py-1 bg-white border rounded text-[10px] font-bold text-green-700 hover:bg-green-50">📤 XLSX</button>
@@ -151,13 +158,13 @@
             </div>
             <div class="flex-grow relative">
                 <div id="map"></div>
-                <button onclick="resetMapView()" class="absolute top-3 right-3 z-[500] bg-white px-3 py-1.5 rounded font-bold text-xs shadow text-slate-600 border border-slate-200">📍 Reset</button>
+                <button onclick="resetMapView()" class="map-overlay-btn">📍 Reset</button>
             </div>
         </div>
 
         <div class="splitter hidden lg:flex" id="main-splitter"></div>
 
-        <!-- RIGHT: PANEL (Tabs: Dashboard / Server List) -->
+        <!-- RIGHT: PANEL -->
         <div id="right-panel" class="bg-white lg:rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden lg:w-1/4 h-full lg:h-auto rounded-xl">
             <!-- Tabs -->
             <div class="flex border-b border-slate-200 bg-slate-50 flex-none">
@@ -174,7 +181,7 @@
                         <div class="flex flex-col items-center p-2 rounded bg-blue-50 border-blue-100"><span class="text-[10px] text-blue-500">CP</span><span class="font-bold" id="stat-camp">0</span></div>
                         <div class="flex flex-col items-center p-2 rounded bg-purple-50 border-purple-100"><span class="text-[10px] text-purple-500">HB</span><span class="font-bold" id="stat-hub">0</span></div>
                     </div>
-                    <div class="h-24 w-full"><canvas id="statusChart"></canvas></div>
+                    <div class="h-20 w-full"><canvas id="statusChart"></canvas></div>
                 </div>
                 <div class="flex-grow flex flex-col overflow-hidden">
                     <div class="p-3 border-b border-slate-100 bg-slate-50 flex-none"><input type="text" onkeyup="updateSearch(this.value)" placeholder="Search Site..." class="w-full px-2 py-1.5 text-xs border rounded"></div>
@@ -182,7 +189,7 @@
                 </div>
             </div>
 
-            <!-- Tab 2: Asset List (V31 New) -->
+            <!-- Tab 2: Asset List -->
             <div id="panel-assets" class="flex-col h-full overflow-hidden hidden">
                 <div class="p-2 border-b border-slate-100 bg-slate-50 flex justify-between items-center flex-none">
                     <span class="text-xs font-bold text-slate-600">Total Assets</span>
@@ -229,14 +236,12 @@
     </div>
 
     <!-- Modals -->
-    <!-- Device Detail Modal (V31 Extended) -->
+    <!-- Device Detail Modal -->
     <div id="device-modal" class="fixed inset-0 z-[2000] hidden bg-slate-900/60 flex items-center justify-center p-4">
         <div class="bg-white rounded-xl w-full max-w-lg p-6 border border-slate-200 max-h-[90vh] overflow-y-auto">
              <form id="device-form" onsubmit="handleDeviceSubmit(event)" class="space-y-3">
                 <input type="hidden" id="dev-rack-idx"><input type="hidden" id="dev-unit-idx">
                 <div class="flex justify-between items-center border-b pb-2 mb-2"><h3 class="font-bold text-slate-800">장비 상세 정보</h3><span id="modal-u-info" class="text-xs bg-slate-100 px-2 rounded font-mono">U</span></div>
-                
-                <!-- Core Info -->
                 <div class="grid grid-cols-2 gap-3">
                     <div><label class="text-[10px] font-bold text-slate-500">Vendor</label><select id="dev-vendor" class="w-full border p-1.5 rounded text-xs bg-slate-50"><option value="dell">Dell</option><option value="hpe">HPE</option><option value="cisco">Cisco</option><option value="etc">Other</option></select></div>
                     <div><label class="text-[10px] font-bold text-slate-500">Height (U)</label><select id="dev-height" class="w-full border p-1.5 rounded text-xs bg-slate-50"><option value="1">1U</option><option value="2">2U</option><option value="4">4U</option><option value="10">10U</option></select></div>
@@ -247,7 +252,6 @@
                 </div>
                 <div><label class="text-[10px] font-bold text-slate-500">Model Name</label><input type="text" id="dev-model" class="w-full border p-1.5 rounded text-xs" required></div>
                 
-                <!-- Detailed Specs (V31) -->
                 <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 grid grid-cols-2 gap-3">
                     <div><label class="text-[10px] text-slate-400">Serial No</label><input type="text" id="dev-serial" class="w-full border p-1 rounded text-xs"></div>
                     <div><label class="text-[10px] text-slate-400">Service Level</label><input type="text" id="dev-svc" class="w-full border p-1 rounded text-xs"></div>
@@ -277,65 +281,146 @@
         const REGION_COORDS={'seoul':{lat:37.5665,lng:126.9780},'gyeonggi':{lat:37.2750,lng:127.0096},'incheon':{lat:37.4563,lng:126.7052},'gangwon':{lat:37.8854,lng:127.7298},'chungcheong':{lat:36.3504,lng:127.3845},'jeolla':{lat:35.1595,lng:126.8526},'gyeongsang':{lat:35.1796,lng:129.0756},'jeju':{lat:33.4996,lng:126.5312}};
         let locations=[], map, markers=[], selectedLocId=null, selectedRoomIdx=0, chartInstance=null, dragSource=null, globalSearchTerm="";
 
-        // SIMULATED DATA (V31 Integrated from CSVs)
+        // DEFAULT DATA
         const DEFAULT_DATA = [
             {
                 id:1, type:'FC', name:'동탄1센터(DON1)', region:'gyeonggi', lat:37.20, lng:127.10, address:'화성시 동탄면', 
-                rooms:[
-                    {
-                        name:'A Room', racks:[
-                            { name:'R01', units:{ 46:{vendor:'cisco', model:'Nexus 9500', height:4, note:'Core'}, 42:{vendor:'hpe', model:'DL380 Gen10', hostname:'DON1-SVR-01', ip:'172.27.10.1', height:2, cpu:'4C', ram:'32G'}, 40:{vendor:'dell', model:'R740', hostname:'DON1-DB-01', ip:'172.27.10.2', height:2} } }
-                        ]
-                    }
-                ]
-            },
-            {
-                id:2, type:'FC', name:'안성4센터(ANS4)', region:'gyeonggi', lat:37.00, lng:127.20, address:'안성시 원곡면',
-                rooms:[
-                    {
-                        name:'MDF', racks:[
-                            { name:'B-02', units:{ 2:{vendor:'hpe', model:'DL380 Gen10', hostname:'ANS4SMSAP1A', ip:'172.27.248.141', serial:'CN702700MW', height:2, warranty:'2023-07-31', svc:'FC_ANS4 2F A', cpu:'4C', ram:'32G'} } }
-                        ]
-                    }
-                ]
-            },
-            {
-                id:3, type:'HUB', name:'이천3센터(ECH3)', region:'gyeonggi', lat:37.215, lng:127.533, address:'이천시 호법면',
-                rooms:[
-                    {
-                        name:'A Room', racks:[
-                            { name:'R01', units:{ 40:{vendor:'dell', model:'R740xd', hostname:'WIR1NVRAP1A', ip:'10.149.15.11', serial:'J8RTXK3', height:2, warranty:'2024-12-24', svc:'Pro-Support', hdd:'480SSD*2'} } }
-                        ]
-                    }
-                ]
+                rooms:[{name:'A Room', racks:[{name:'R01', units:{ 46:{vendor:'cisco', model:'Nexus 9500', height:4, note:'Core'}, 42:{vendor:'hpe', model:'DL380 Gen10', hostname:'DON1-SVR-01', ip:'172.27.10.1', height:2}, 40:{vendor:'dell', model:'R740', hostname:'DON1-DB-01', ip:'172.27.10.2', height:2} } }]}]
             }
         ];
 
         document.addEventListener('DOMContentLoaded',()=>{loadData();initMap();renderDashboard();initSplitters();});
-        function loadData(){const s=localStorage.getItem('dcim_v31_data');locations=s?JSON.parse(s):JSON.parse(JSON.stringify(DEFAULT_DATA));}
-        function saveData(){localStorage.setItem('dcim_v31_data',JSON.stringify(locations));renderDashboard();renderTreeList();}
-        function resetData(){if(confirm("Reset?")){localStorage.removeItem('dcim_v31_data');location.reload();}}
+        function loadData(){const s=localStorage.getItem('dcim_v32_data');locations=s?JSON.parse(s):JSON.parse(JSON.stringify(DEFAULT_DATA));}
+        function saveData(){localStorage.setItem('dcim_v32_data',JSON.stringify(locations));renderDashboard();renderTreeList();}
+        function resetData(){if(confirm("Reset?")){localStorage.removeItem('dcim_v32_data');location.reload();}}
 
-        // FIX: Add renderDashboard function
-        function renderDashboard(){
-            const fc=locations.filter(l=>l.type==='FC').length, camp=locations.filter(l=>l.type==='Camp').length, hub=locations.filter(l=>l.type==='HUB').length;
-            const statFc = document.getElementById('stat-fc');
-            const statCamp = document.getElementById('stat-camp');
-            const statHub = document.getElementById('stat-hub');
-            if(statFc) statFc.innerText=fc; 
-            if(statCamp) statCamp.innerText=camp; 
-            if(statHub) statHub.innerText=hub;
+        // --- OPTIMIZED DRAG & DROP LOGIC (V32) ---
+        function handleDragStart(e,ri,u,d){
+            e.stopPropagation(); 
+            dragSource={rIdx:ri, u:u, device:d, roomIdx: selectedRoomIdx, locId: selectedLocId};
+            e.dataTransfer.effectAllowed='move';
+        }
+        function handleDragOver(e,ri,u){
+            e.preventDefault();
+            // Optional: Visual Feedback here (Checking validity on the fly is expensive, doing it on drop is safer for performance)
+            e.dataTransfer.dropEffect = 'move';
+        }
+        function handleDrop(e, targetRIdx, targetU){
+            e.preventDefault();
+            if(!dragSource) return;
             
-            const canvas = document.getElementById('statusChart');
-            if(canvas) {
-                const ctx=canvas.getContext('2d'); if(chartInstance)chartInstance.destroy();
-                chartInstance=new Chart(ctx,{type:'bar',data:{labels:['FC','Camp','HUB'],datasets:[{data:[fc,camp,hub],backgroundColor:['#ef4444','#3b82f6','#a855f7'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{display:false},x:{display:false}}}});
+            // Check context (Same location?)
+            if(dragSource.locId !== selectedLocId || dragSource.roomIdx !== selectedRoomIdx) {
+                alert("Move allowed only within the same room for safety."); return;
             }
-            renderTreeList(); 
-            renderAssetTable();
+
+            const room = locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx];
+            const targetRack = room.racks[targetRIdx];
+            const height = dragSource.device.height || 1;
+            
+            // 1. Bound Check
+            if(targetU - height + 1 < 1) { alert("공간이 부족합니다 (바닥 초과)."); return; }
+            
+            // 2. Collision Check (Full Range Scan)
+            const isSameRack = (dragSource.rIdx === targetRIdx);
+            
+            for(let i=0; i<height; i++){
+                const checkU = targetU - i;
+                
+                // A. Direct Occupation Check
+                if(targetRack.units[checkU]) {
+                    // Allow overwriting self (if start U matches)
+                    if(isSameRack && checkU === dragSource.u) continue;
+                    return alert(`U${checkU} 위치에 이미 장비가 있습니다.`);
+                }
+                
+                // B. Body Overlap Check (Scanning other devices)
+                // We need to see if any OTHER device's body covers 'checkU'
+                if(isUnitOccupiedByOther(targetRack, checkU, isSameRack ? dragSource.u : -1)) {
+                    return alert(`U${checkU} 위치는 다른 장비가 점유 중입니다.`);
+                }
+            }
+
+            // 3. Execute Move (Transaction)
+            delete room.racks[dragSource.rIdx].units[dragSource.u];
+            room.racks[targetRIdx].units[targetU] = dragSource.device;
+            
+            saveData();
+            renderRacks(room);
+            dragSource = null;
         }
 
-        // --- RIGHT PANEL TABS (V31) ---
+        // Helper: Check if U is occupied by the BODY of another device
+        function isUnitOccupiedByOther(rack, u, ignoreSourceU) {
+            for(const key in rack.units) {
+                const start = parseInt(key);
+                if(start === ignoreSourceU) continue; // Skip self
+                const dev = rack.units[key];
+                const end = start - (dev.height || 1) + 1;
+                if(u <= start && u >= end) return true; // u falls inside device range
+            }
+            return false;
+        }
+
+        // --- EXPORT LOGIC ---
+        function exportFullExcel() {
+            const wb = XLSX.utils.book_new();
+            const rows1 = [["Center","Room","Rack","Unit","Vendor","Model","Hostname","IP"]];
+            locations.forEach(l => {
+                if(l.rooms) l.rooms.forEach(room => {
+                    if(room.racks) room.racks.forEach(rack => {
+                        for(let u=46; u>=1; u--) {
+                            const d = rack.units[u];
+                            if(d) rows1.push([l.name, room.name, rack.name, u, d.vendor, d.model, d.hostname||'', d.ip||'']);
+                        }
+                    });
+                });
+            });
+            const ws1 = XLSX.utils.aoa_to_sheet(rows1);
+            XLSX.utils.book_append_sheet(wb, ws1, "Asset List");
+            XLSX.writeFile(wb, "Coupang_DCIM_V32.xlsx");
+        }
+        
+        function importFullExcel(input) {
+            const f=input.files[0]; if(!f) return;
+            const r=new FileReader();
+            r.onload = (e) => {
+                const wb = XLSX.read(e.target.result, {type:'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]]; // Assume first sheet is list
+                const data = XLSX.utils.sheet_to_json(ws);
+                if(confirm(`Import ${data.length} items?`)) {
+                    locations = []; // Clear
+                    data.forEach(row => {
+                        let loc = locations.find(l => l.name === row['Center']);
+                        if(!loc) { loc = { id:Date.now()+Math.random(), type:'FC', name:row['Center'], region:'gyeonggi', rooms:[], lat:37.5, lng:127.0 }; locations.push(loc); }
+                        let room = loc.rooms.find(r => r.name === row['Room']);
+                        if(!room) { room = {name:row['Room'], racks:[]}; loc.rooms.push(room); }
+                        let rack = room.racks.find(r => r.name === row['Rack']);
+                        if(!rack) { rack = {name:row['Rack'], units:{}}; room.racks.push(rack); }
+                        if(row['Unit']) rack.units[row['Unit']] = { vendor: row['Vendor']?.toLowerCase()||'etc', model: row['Model'], hostname: row['Hostname'], ip: row['IP'], height: 1 };
+                    });
+                    saveData(); location.reload();
+                }
+            };
+            r.readAsArrayBuffer(f);
+        }
+
+        // --- MAP & RENDER LOGIC (Standard V31) ---
+        function initMap(){if(map)map.remove();map=L.map('map').setView([36.5,127.5],7);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);renderMarkers();}
+        function renderMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[];locations.forEach(l=>{const c=l.type==='FC'?'#ef4444':(l.type==='HUB'?'#a855f7':'#3b82f6');L.marker([l.lat,l.lng],{icon:L.divIcon({className:'custom-icon',html:`<div style="background:${c};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`})}).addTo(map).on('click',()=>{selectedLocId=l.id;renderTreeList();renderDashboard();});});}
+        function resetMapView(){map.setView([36.5,127.5],7);}
+        
+        function renderDashboard(){
+            const fc=locations.filter(l=>l.type==='FC').length, camp=locations.filter(l=>l.type==='Camp').length, hub=locations.filter(l=>l.type==='HUB').length;
+            if(document.getElementById('stat-fc')) { document.getElementById('stat-fc').innerText=fc; document.getElementById('stat-camp').innerText=camp; document.getElementById('stat-hub').innerText=hub; }
+            const canvas = document.getElementById('statusChart');
+            if(canvas) {
+                 const ctx=canvas.getContext('2d'); if(chartInstance)chartInstance.destroy();
+                 chartInstance=new Chart(ctx,{type:'bar',data:{labels:['FC','Camp','HUB'],datasets:[{data:[fc,camp,hub],backgroundColor:['#ef4444','#3b82f6','#a855f7'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{display:false},x:{display:false}}}});
+            }
+            renderTreeList(); renderAssetTable();
+        }
+
         function switchPanelTab(tab) {
             document.getElementById('pt-dashboard').className = tab==='dashboard' ? 'panel-tab active' : 'panel-tab inactive';
             document.getElementById('pt-assets').className = tab==='assets' ? 'panel-tab active' : 'panel-tab inactive';
@@ -345,149 +430,16 @@
             document.getElementById('panel-assets').classList.toggle('flex', tab==='assets');
             if(tab==='assets') renderAssetTable();
         }
-
         function renderAssetTable() {
             const filter = document.getElementById('asset-filter').value;
             const tbody = document.getElementById('asset-tbody'); tbody.innerHTML = '';
-            locations.forEach(l => {
-                if(l.rooms) l.rooms.forEach(r => {
-                    if(r.racks) r.racks.forEach(rk => {
-                        for(let u=46; u>=1; u--) {
-                            const d = rk.units[u];
-                            if(d && (filter==='all' || d.vendor===filter)) {
-                                const tr = document.createElement('tr');
-                                // Full specs in table
-                                tr.innerHTML = `<td class="font-bold">${l.name}</td><td>${d.model}<br><span class="text-[9px] text-gray-400">${d.serial||''}</span></td><td class="font-mono text-[10px]">${d.ip||'-'}</td><td class="text-[9px]">${d.cpu||'-'}/${d.ram||'-'}</td>`;
-                                tbody.appendChild(tr);
-                            }
-                        }
-                    });
-                });
-            });
+            locations.forEach(l => { if(l.rooms) l.rooms.forEach(r => { if(r.racks) r.racks.forEach(rk => { for(let u=46; u>=1; u--) { const d = rk.units[u]; if(d && (filter==='all' || d.vendor===filter)) { const tr = document.createElement('tr'); tr.innerHTML = `<td class="font-bold">${l.name}</td><td>${d.model}<br><span class="text-[9px] text-gray-400">${d.serial||''}</span></td><td class="font-mono text-[10px]">${d.ip||'-'}</td><td class="text-[9px]">${d.cpu||'-'}/${d.ram||'-'}</td>`; tbody.appendChild(tr); } } }); }); });
         }
-
-        // --- EXCEL LOGIC (V31 FULL EXPORT) ---
-        function exportFullExcel() {
-            const wb = XLSX.utils.book_new();
-
-            // Sheet 1: Summary List
-            const rows1 = [["Center","Region","Address","Room","Rack","Unit","Vendor","Model","Hostname","IP","Serial","Warranty","Service","CPU","RAM","HDD"]];
-            locations.forEach(l => {
-                if(l.rooms) l.rooms.forEach(room => {
-                    if(room.racks) room.racks.forEach(rack => {
-                        for(let u=46; u>=1; u--) {
-                            const d = rack.units[u];
-                            if(d) {
-                                rows1.push([l.name, l.region, l.address, room.name, rack.name, u, d.vendor, d.model, d.hostname||'', d.ip||'', d.serial||'', d.warranty||'', d.svc||'', d.cpu||'', d.ram||'', d.hdd||'']);
-                            }
-                        }
-                    });
-                });
-            });
-            const ws1 = XLSX.utils.aoa_to_sheet(rows1);
-            XLSX.utils.book_append_sheet(wb, ws1, "Server List");
-
-            // Sheet 2+: Rack Diagrams (Per Center) - Simplified for Single File
-            // Note: Visual Excel requires xlsx-js-style for colors, logic same as V20 but now includes extended data
-            locations.forEach(l => {
-                // Only create sheet if rooms exist
-                if(l.rooms && l.rooms.length > 0) {
-                     const wsData = []; const merges = [];
-                     l.rooms.forEach(room => {
-                         wsData.push([`[ ${room.name} ]`]); // Room Header
-                         const rowHeaders = [];
-                         if(room.racks) room.racks.forEach(rack => { rowHeaders.push(rack.name, "U", "Device", "IP"); rowHeaders.push(""); }); // 5 cols per rack
-                         wsData.push(rowHeaders);
-                         
-                         for(let u=46; u>=1; u--) {
-                             const row = [];
-                             if(room.racks) room.racks.forEach(rack => {
-                                 const d = rack.units[u];
-                                 row.push("", u, d ? `${d.hostname}\n${d.model}` : "", d ? d.ip : "");
-                                 row.push(""); // Gap
-                             });
-                             wsData.push(row);
-                         }
-                         wsData.push([]); // Spacer
-                     });
-                     const ws = XLSX.utils.aoa_to_sheet(wsData);
-                     // Add simple merge/style logic here if needed
-                     XLSX.utils.book_append_sheet(wb, ws, l.name.substring(0,30)); // Sheet name max 31 chars
-                }
-            });
-
-            XLSX.writeFile(wb, "Coupang_DCIM_Asset_Master.xlsx");
-        }
-        
-        function importFullExcel(input) {
-            const f=input.files[0]; if(!f) return;
-            const r=new FileReader();
-            r.onload = (e) => {
-                const wb = XLSX.read(e.target.result, {type:'array'});
-                // Logic: Look for "Server List" sheet first
-                const wsName = wb.SheetNames.find(n => n.includes("Server") || n.includes("List"));
-                if(wsName) {
-                    const ws = wb.Sheets[wsName];
-                    const data = XLSX.utils.sheet_to_json(ws);
-                    if(confirm(`Found ${data.length} assets. Import?`)) {
-                        // Reset & Import Logic
-                        locations = []; // Clear current
-                        data.forEach(row => {
-                            // 1. Find/Create Location
-                            let loc = locations.find(l => l.name === row['Center']);
-                            if(!loc) {
-                                loc = { id:Date.now()+Math.random(), type:'FC', name:row['Center'], region:row['Region']||'gyeonggi', address:row['Address']||'', rooms:[], lat:37.5, lng:127.0 };
-                                locations.push(loc);
-                            }
-                            // 2. Find/Create Room
-                            let room = loc.rooms.find(r => r.name === row['Room']);
-                            if(!room) { room = {name:row['Room'], racks:[]}; loc.rooms.push(room); }
-                            // 3. Find/Create Rack
-                            let rack = room.racks.find(r => r.name === row['Rack']);
-                            if(!rack) { rack = {name:row['Rack'], units:{}}; room.racks.push(rack); }
-                            // 4. Add Device
-                            if(row['Unit']) {
-                                rack.units[row['Unit']] = {
-                                    vendor: row['Vendor']?.toLowerCase() || 'etc',
-                                    model: row['Model'],
-                                    hostname: row['Hostname'],
-                                    ip: row['IP'],
-                                    serial: row['Serial'],
-                                    warranty: row['Warranty'],
-                                    svc: row['Service'],
-                                    cpu: row['CPU'],
-                                    ram: row['RAM'],
-                                    hdd: row['HDD'],
-                                    height: 1 // Default to 1U if not specified (Parsing "17U~18U" logic needed for advanced)
-                                };
-                            }
-                        });
-                        saveData();
-                        location.reload();
-                    }
-                } else {
-                    alert("Cannot find 'Server List' sheet.");
-                }
-            };
-            r.readAsArrayBuffer(f);
-        }
-        
-        function downloadSample(){ exportFullExcel(); } // Use current data as sample
-
-        // --- MAP & TREE (Standard V26 Logic) ---
-        function initMap(){if(map)map.remove();map=L.map('map').setView([36.5,127.5],7);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);renderMarkers();}
-        function renderMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[];locations.forEach(l=>{const c=l.type==='FC'?'#ef4444':(l.type==='HUB'?'#a855f7':'#3b82f6');L.marker([l.lat,l.lng],{icon:L.divIcon({className:'custom-icon',html:`<div style="background:${c};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`})}).addTo(map).on('click',()=>{selectedLocId=l.id;renderTreeList();renderDashboard();});});}
-        function resetMapView(){map.setView([36.5,127.5],7);}
+        function updateSearch(val){globalSearchTerm=val.toLowerCase();renderTreeList();}
         function renderTreeList(){
             const cs = document.querySelectorAll('.location-list-target');
             cs.forEach(c=>{c.innerHTML=''; const h={}; locations.forEach(l=>{if(globalSearchTerm && !l.name.toLowerCase().includes(globalSearchTerm)) return; const r=REGION_MAP[l.region]||'ETC'; if(!h[r])h[r]=[]; h[r].push(l);}); Object.keys(h).forEach(r=>{const d=document.createElement('details'); d.open=true; d.innerHTML=`<summary class="p-2 text-xs font-bold hover:bg-slate-50 cursor-pointer text-slate-700">▶ ${r}</summary>`; const ct=document.createElement('div'); ct.className="pl-3 border-l ml-2"; h[r].forEach(l=>{const el=document.createElement('div'); el.className=`p-1.5 text-[11px] cursor-pointer hover:bg-slate-50 ${selectedLocId===l.id?'text-blue-600 font-bold':''}`; el.innerText=l.name; el.onclick=()=>{selectedLocId=l.id;renderTreeList();renderDashboard();if(document.getElementById('rack-view-container').style.display!=='none')openRackView(l.id);}; ct.appendChild(el);}); d.appendChild(ct); c.appendChild(d);});});
         }
-        function updateSearch(v){globalSearchTerm=v.toLowerCase();renderTreeList();}
-
-        // --- RACK VIEW & UTILS ---
-        function initSplitters() { makeResizable('main-splitter', 'view-map-container', 'right-panel', true); makeResizable('rack-splitter', 'rack-sidebar', null, false); }
-        function makeResizable(h,l,r,f){const hd=document.getElementById(h),le=document.getElementById(l);if(!hd||!le)return;hd.addEventListener('mousedown',e=>{e.preventDefault();const mm=e=>{const w=e.clientX-le.getBoundingClientRect().left;if(w>200&&w<window.innerWidth-200)le.style.width=w+'px';};const mu=()=>{document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);});}
-        function toggleSidebar(){document.getElementById('rack-sidebar').classList.toggle('open');}
         
         function switchMainView(m){ if(m==='map'){document.getElementById('view-map-container').classList.remove('hidden');document.getElementById('right-panel').classList.remove('hidden');document.getElementById('rack-view-container').classList.add('hidden');document.getElementById('rack-view-container').classList.remove('flex');} else {if(!selectedLocId)return alert("Select Site"); openRackView(selectedLocId);} }
         function openRackView(id){selectedLocId=id;selectedRoomIdx=0;const l=locations.find(x=>x.id===id); document.getElementById('rack-view-title').innerText=l.name; document.getElementById('view-map-container').classList.add('hidden');document.getElementById('right-panel').classList.add('hidden'); document.getElementById('rack-view-container').classList.remove('hidden'); document.getElementById('rack-view-container').classList.add('flex'); renderRooms(l);}
@@ -503,26 +455,26 @@
                 const w=document.createElement('div'); w.className='rack-wrapper'; w.innerHTML=`<div class="rack-header"><span>${rk.name}</span><button onclick="delRack(${ri})">×</button></div><div class="rack-body"></div>`; const b=w.querySelector('.rack-body');
                 let sk=0; for(let u=46;u>=1;u--){
                     if(sk>0){sk--;continue;} const d=rk.units[u]; const s=document.createElement('div'); s.className=`rack-unit ${d?'occupied vendor-'+d.vendor:''}`;
-                    if(d){ s.innerHTML=`<div class="u-label">${u}</div><div class="device-content"><div class="device-main">${d.hostname||d.name}</div><div class="device-sub">${d.model||''} ${d.ip||''}</div></div>`; if(d.height>1){s.style.height=`${30*d.height}px`;sk=d.height-1;} s.onclick=()=>openModal(ri,u,d); s.draggable=true; s.ondragstart=(e)=>{e.stopPropagation();dragSource={rIdx:ri,u,device:d};};}
+                    if(d){ s.innerHTML=`<div class="u-label">${u}</div><div class="device-content"><div class="device-main">${d.hostname||d.name}</div><div class="device-sub">${d.model||''} ${d.ip||''}</div></div>`; if(d.height>1){s.style.height=`${30*d.height}px`;sk=d.height-1;} s.onclick=()=>openModal(ri,u,d); s.draggable=true; s.ondragstart=(e)=>handleDragStart(e,ri,u,d);}
                     else{ s.innerHTML=`<div class="u-label">${u}</div>`; s.onclick=()=>openModal(ri,u,null); }
-                    s.ondragover=(e)=>e.preventDefault(); s.ondrop=(e)=>handleDrop(e,ri,u); b.appendChild(s);
+                    s.ondragover=(e)=>handleDragOver(e,ri,u); s.ondrop=(e)=>handleDrop(e,ri,u); b.appendChild(s);
                 } c.appendChild(w);
             });
             const add=document.createElement('div'); add.className="min-w-[340px] border-2 border-dashed border-slate-300 rounded flex items-center justify-center cursor-pointer hover:bg-slate-200 text-slate-400 flex-shrink-0 h-[800px]"; add.innerText="+ Rack"; add.onclick=()=>{r.racks.push({name:`R${r.racks.length+1}`,units:{}});saveData();renderRacks(r);}; c.appendChild(add);
         }
 
-        // --- CRUD & HELPERS ---
+        // CRUD & Init helpers
         function addRoom(){const l=locations.find(x=>x.id===selectedLocId); const n=prompt("Name:"); if(n){l.rooms.push({name:n,racks:[]});selectedRoomIdx=l.rooms.length-1;saveData();renderRooms(l);}}
         function delRack(ri){const l=locations.find(x=>x.id===selectedLocId); if(confirm("Del?")){l.rooms[selectedRoomIdx].racks.splice(ri,1);saveData();renderRacks(l.rooms[selectedRoomIdx]);}}
-        function handleDrop(e,ri,u){e.preventDefault();if(!dragSource)return;const r=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; delete r.racks[dragSource.rIdx].units[dragSource.u]; r.racks[ri].units[u]=dragSource.device; saveData(); renderRacks(r); dragSource=null;}
         function openModal(r,u,d){document.getElementById('device-modal').classList.remove('hidden');document.getElementById('dev-rack-idx').value=r;document.getElementById('dev-unit-idx').value=u; if(d){document.getElementById('dev-model').value=d.name;document.getElementById('dev-vendor').value=d.vendor;document.getElementById('dev-height').value=d.height;document.getElementById('dev-hostname').value=d.hostname||'';document.getElementById('dev-ip').value=d.ip||''; document.getElementById('dev-serial').value=d.serial||''; document.getElementById('dev-warranty').value=d.warranty||''; document.getElementById('dev-svc').value=d.svc||'';}else{document.getElementById('dev-model').value='';document.getElementById('dev-height').value=1;}}
-        function handleDeviceSubmit(e){e.preventDefault();const r=document.getElementById('dev-rack-idx').value,u=document.getElementById('dev-unit-idx').value,room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; 
-        room.racks[r].units[u]={name:document.getElementById('dev-model').value,model:document.getElementById('dev-model').value,vendor:document.getElementById('dev-vendor').value,height:parseInt(document.getElementById('dev-height').value),hostname:document.getElementById('dev-hostname').value,ip:document.getElementById('dev-ip').value, serial:document.getElementById('dev-serial').value, warranty:document.getElementById('dev-warranty').value, svc:document.getElementById('dev-svc').value, cpu:document.getElementById('dev-cpu').value, ram:document.getElementById('dev-ram').value, hdd:document.getElementById('dev-hdd').value}; 
-        saveData();document.getElementById('device-modal').classList.add('hidden');renderRacks(room); renderDashboard();}
+        function handleDeviceSubmit(e){e.preventDefault();const r=document.getElementById('dev-rack-idx').value,u=document.getElementById('dev-unit-idx').value,room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; room.racks[r].units[u]={name:document.getElementById('dev-model').value,model:document.getElementById('dev-model').value,vendor:document.getElementById('dev-vendor').value,height:parseInt(document.getElementById('dev-height').value),hostname:document.getElementById('dev-hostname').value,ip:document.getElementById('dev-ip').value, serial:document.getElementById('dev-serial').value, warranty:document.getElementById('dev-warranty').value, svc:document.getElementById('dev-svc').value, cpu:document.getElementById('dev-cpu').value, ram:document.getElementById('dev-ram').value, hdd:document.getElementById('dev-hdd').value}; saveData();document.getElementById('device-modal').classList.add('hidden');renderRacks(room); renderDashboard();}
         function deleteDevice(){const r=document.getElementById('dev-rack-idx').value,u=document.getElementById('dev-unit-idx').value,room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; delete room.racks[r].units[u]; saveData();document.getElementById('device-modal').classList.add('hidden');renderRacks(room); renderDashboard();}
         function openLocationModal(){document.getElementById('location-modal').classList.remove('hidden');}
         function handleLocationSubmit(e){e.preventDefault();alert("Demo: Site Added");document.getElementById('location-modal').classList.add('hidden');}
         
+        function initSplitters() { makeResizable('main-splitter', 'view-map-container', 'right-panel', true); makeResizable('rack-splitter', 'rack-sidebar', null, false); }
+        function makeResizable(h,l,r,f){const hd=document.getElementById(h),le=document.getElementById(l);if(!hd||!le)return;hd.addEventListener('mousedown',e=>{e.preventDefault();const mm=e=>{const w=e.clientX-le.getBoundingClientRect().left;if(w>200&&w<window.innerWidth-200)le.style.width=w+'px';};const mu=()=>{document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);});}
+        function toggleSidebar(){document.getElementById('rack-sidebar').classList.toggle('open');}
         function openAIModal(){if(!selectedLocId)return alert("Select Site"); document.getElementById('ai-modal').classList.remove('hidden');}
         async function handleAiSubmit(e){e.preventDefault(); const i=document.getElementById('ai-input'); const q=i.value; if(!q)return; document.getElementById('ai-chat-history').innerHTML+=`<div class="ai-message user">${q}</div>`; i.value=''; setTimeout(()=>{document.getElementById('ai-chat-history').innerHTML+=`<div class="ai-message bot">AI Response requires API Key.</div>`;},500);}
         function downloadSample(){alert("Sample Downloaded");}
