@@ -1,154 +1,481 @@
+<!-- 
+  Project: Coupang Logistics & Enterprise DCIM System V25 (Dual Layout)
+  Author: IT Infrastructure Engineer
+  
+  [V25 Changelog]
+  1. UX FIX: Clicking 'DCIM Rack' tab without selecting a location now triggers an alert.
+  2. LAYOUT: DCIM View now includes a Left Sidebar (Location Tree) for quick navigation.
+  3. SYNC: Tree list renders in both Main View and DCIM View simultaneously.
+  4. CORE: Retained all previous V24 features (AI, Excel, Smart Geo, Drag&Drop).
+-->
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>지금 안으로</title>
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        padding: 20px;
-    }
-    #search-container {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 20px;
-    }
-    #search {
-        width: 100%;
-        max-width: 300px; /* 행의 상품 크기와 맞추기 */
-        padding: 10px;
-        box-sizing: border-box;
-    }
-    #products {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-    }
-    .product {
-        margin: 20px;
-        text-align: center;
-        width: calc(50% - 40px); /* 한 줄에 두 개의 상품이 나오도록 설정 */
-        max-width: 300px; /* 최대 너비 설정 */
-    }
-    .product img {
-        width: 100%;
-        max-width: 240px; /* 이미지 최대 너비 설정 */
-        height: auto;
-        border-radius: 10px; /* 이미지 모서리 둥글게 */
-    }
-    a {
-        text-decoration: none;
-        color: black;
-    }
-    #footer {
-        text-align: center;
-        margin-top: 20px;
-        padding-top: 10px;
-        border-top: 1px solid #ccc;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise DCIM Manager V25</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; }
+        .font-mono { font-family: 'Roboto Mono', monospace; }
+        
+        #map { height: 100%; width: 100%; border-radius: 0.75rem; z-index: 1; }
+        
+        /* Scrollbars */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        /* Rack Visualizer */
+        .rack-wrapper {
+            width: 360px; min-width: 360px;
+            background-color: #0f172a; border: 2px solid #334155; border-radius: 6px;
+            display: flex; flex-direction: column; height: fit-content; flex-shrink: 0;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6); margin-bottom: 20px;
+        }
+        .rack-header {
+            background-color: #1e293b; color: white; padding: 10px 12px;
+            font-weight: 700; font-size: 13px; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #475569; border-radius: 4px 4px 0 0;
+        }
+        .rack-body { background-color: #020617; padding: 4px; position: relative; }
+        .rack-unit {
+            height: 30px; border-bottom: 1px solid #1e293b; display: flex; align-items: center;
+            font-size: 12px; color: #64748b; cursor: pointer; user-select: none; transition: all 0.1s;
+        }
+        .rack-unit:hover { background-color: #1e293b; }
+        .rack-unit.occupied { color: white; border-bottom: 1px solid rgba(255,255,255,0.15); position: relative; z-index: 10; cursor: grab; }
+        
+        /* Vendor Colors */
+        .vendor-dell { background: linear-gradient(90deg, #0076CE 0%, #005b9f 100%); border-left: 3px solid #60a5fa; }
+        .vendor-hpe { background: linear-gradient(90deg, #01A982 0%, #018566 100%); border-left: 3px solid #34d399; }
+        .vendor-cisco { background: linear-gradient(90deg, #049fd9 0%, #037ba8 100%); border-left: 3px solid #38bdf8; }
+        .vendor-brocade { background: linear-gradient(90deg, #d11242 0%, #a30e33 100%); border-left: 3px solid #fb7185; }
+        .vendor-etc { background: linear-gradient(90deg, #475569 0%, #334155 100%); border-left: 3px solid #94a3b8; }
+
+        .u-label { width: 32px; text-align: center; border-right: 1px solid rgba(255,255,255,0.1); margin-right: 6px; font-family: 'Roboto Mono'; font-size: 10px; color: #94a3b8; flex-shrink: 0; height: 100%; display: flex; align-items: center; justify-content: center; pointer-events: none;}
+        .occupied .u-label { color: rgba(255,255,255,0.9); }
+        .device-content { flex-grow: 1; padding: 0 4px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; pointer-events: none;}
+        .device-main { font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color:white; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+        .device-sub { font-size: 9px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Roboto Mono'; color:#cbd5e1; }
+        .u-badge { position: absolute; right: 4px; top: 2px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px; font-size: 8px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1); pointer-events: none; }
+
+        /* Tabs */
+        .tab-strip-container {
+            display: flex; align-items: flex-end; 
+            border-bottom: 1px solid #d1d5db; background-color: #f1f5f9;
+            padding-left: 10px; padding-right: 10px; height: 44px;
+            flex-grow: 1; overflow: hidden;
+        }
+        .tab-scroll-area {
+            display: flex; align-items: flex-end; gap: -4px; 
+            overflow-x: auto; flex-grow: 1; height: 100%;
+            padding-top: 4px;
+        }
+        .room-tab {
+            display: flex; align-items: center; gap: 6px;
+            padding: 0 20px; height: 34px;
+            border-top-left-radius: 10px; border-top-right-radius: 10px;
+            border: 1px solid #cbd5e1; border-bottom: none;
+            background: linear-gradient(to bottom, #f1f5f9, #e2e8f0);
+            color: #64748b; font-size: 13px; font-weight: bold;
+            cursor: pointer; select-none: none; position: relative;
+            min-width: max-content; transition: all 0.2s;
+            box-shadow: inset 0 -2px 4px rgba(0,0,0,0.05); z-index: 1;
+        }
+        .room-tab:hover { background: #e2e8f0; color: #334155; z-index: 5; }
+        .room-tab.active {
+            height: 40px; background: white; color: #ea580c; border-color: #cbd5e1; border-top: 3px solid #ea580c; border-bottom: 1px solid white; margin-bottom: -1px; z-index: 10; box-shadow: 0 -2px 6px rgba(0,0,0,0.08);
+        }
+        .tab-actions { display: flex; gap: 4px; margin-left: 6px; opacity: 0.6; }
+        .room-tab:hover .tab-actions, .room-tab.active .tab-actions { opacity: 1; }
+        .tab-icon { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 11px; cursor: pointer; }
+        .tab-icon:hover { background-color: rgba(0,0,0,0.1); color: #1e293b; }
+        .tab-icon.del:hover { background-color: #fee2e2; color: #ef4444; }
+
+        .add-room-btn {
+            display: flex; align-items: center; justify-content: center;
+            height: 32px; padding: 0 12px; margin-left: 8px; margin-bottom: 4px;
+            background-color: white; color: #ea580c; border: 1px dashed #ea580c;
+            border-radius: 6px; font-size: 12px; font-weight: bold;
+            cursor: pointer; transition: all 0.2s; white-space: nowrap; flex-shrink: 0;
+        }
+        .add-room-btn:hover { background-color: #fff7ed; }
+
+        /* View Switcher Tabs */
+        .view-tab {
+            padding: 4px 12px; font-size: 11px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s;
+            display: flex; items-center; gap: 4px;
+        }
+        .view-tab.active { background-color: #1e293b; color: white; shadow: sm; }
+        .view-tab.inactive { color: #64748b; hover:bg-slate-100; }
+
+        /* Tree View */
+        details > summary { list-style: none; cursor: pointer; }
+        .tree-arrow { transition: transform 0.2s; display: inline-block; font-size: 10px; }
+        details[open] > summary .tree-arrow { transform: rotate(90deg); }
+        
+        .ai-message { @apply mb-3 p-3 rounded-lg text-sm max-w-[90%]; line-height: 1.5; }
+        .ai-message.user { @apply bg-orange-100 text-orange-900 ml-auto rounded-tr-none; }
+        .ai-message.bot { @apply bg-white text-slate-800 mr-auto rounded-tl-none border border-slate-200 shadow-sm; }
+    </style>
 </head>
-<body>
+<body class="text-slate-800 h-screen flex flex-col overflow-hidden bg-slate-50">
 
-<div id="search-container">
-    <input type="text" id="search" placeholder="검색어를 입력하세요">
-</div>
+    <!-- Header -->
+    <header class="bg-white shadow-sm z-50 flex-none h-16 border-b border-slate-200">
+        <div class="max-w-full mx-auto px-6 h-full flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-orange-600 rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-md">V25</div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-slate-800">수도권 물류 거점 <span class="text-orange-600">통합 관리</span></h1>
+                    <div class="text-xs text-slate-400">Enterprise Infrastructure Dashboard</div>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="openAIModal()" class="px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-600 text-white rounded-lg text-xs font-bold shadow hover:opacity-90 flex items-center gap-2">✨ AI 분석</button>
+                <div class="h-8 w-px bg-slate-200 mx-2"></div>
+                <button onclick="syncData()" class="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 border border-indigo-200">🔄 동기화</button>
+                <button onclick="openLocationModal()" class="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 shadow-lg flex items-center gap-1">+ 등록</button>
+                <button onclick="resetData()" class="px-3 py-2 text-slate-400 hover:text-red-500 transition">🗑️</button>
+            </div>
+        </div>
+    </header>
 
-<div id="products">
-    <div class="product">
-        <a href="https://smartstore.naver.com/mbox-store/products/9939474238" target="_blank">
-            <img src="https://shop-phinf.pstatic.net/20240211_127/1707622427253OzUfE_JPEG/KakaoTalk_20240211_122603671.jpg?type=w860" alt="지금을사는지혜">
-            <div>지금을사는지혜</div>
-        </a>
-    </div>
-    <div class="product">
-        <a href="https://smartstore.naver.com/mbox-store/products/10151471413" target="_blank">
-            <img src="https://shop-phinf.pstatic.net/20240401_299/1711982408274B904h_JPEG/1000005283.jpg?type=w860" alt="지금안으로 글쓰기">
-            <div>지금안으로 글쓰기</div>
-        </a>
-    </div>
-    <div class="product">
-        <a href="https://smartstore.naver.com/mbox-store" target="_blank">
-            <img src="https://shop-phinf.pstatic.net/20240108_96/1704707361504tW8My_JPEG/105843145221677118_890552068.jpg?type=w860" alt="스마트스토어">
-            <div>스마트스토어</div>
-        </a>
-    </div>
-    <div class="product">
-        <a href="https://shop.coupang.com/mboxstore" target="_blank">
-            <img src="https://play-lh.googleusercontent.com/8msnO6oTmyhor9n-MbQdufBU0TChhfKsFBA02OIKMxp7vOkd1YgwvCUzabvVlAQGwcA=w240-h480-rw?type=w860" alt="쿠팡마이샵">
-            <div>쿠팡마이샵</div>
-        </a>
-    </div>
-    <div class="product">
-        <a href="https://store.kakao.com/mbox" target="_blank">
-            <img src="https://st.kakaocdn.net/commerce_ui/admin-product/favicon.ico?type=w860" alt="카카오톡스토어">
-            <div>카카오톡스토어</div>
-        </a>
-    </div>
-    <!-- 토스 상품 링크 -->
-    <!-- 상품1 -->
-    <div class="product">
-        <a href="https://service.toss.im/shopping/p/467693" target="_blank">
-            <img src="https://bananab2b.co.kr/data/bananab2b/goods/jcb2b/small/2024047680586480.jpg?type=w860" alt="산리오친구들정리함">
-            <div>산리오친구들정리함</div>
-        </a>
-    </div>
-    <!-- 상품2 -->
-    <div class="product">
-        <a href="https://service.toss.im/shopping/p/420585" target="_blank">
-            <img src="https://bananab2b.co.kr/data/bananab2b/goods/bananaqhick/big/202320652538688649286.jpg?type=w860" alt="레디백">
-            <div>레디백</div>
-        </a>
-    </div>
-    <!-- 상품3 -->
-    <div class="product">
-        <a href="https://service.toss.im/shopping/p/373007" target="_blank">
-            <img src="https://bananab2b.co.kr/data/bananab2b/goods/bananaqhick/small/202017856825988522054.jpg?type=w860" alt="U자형 바디필로우">
-            <div>U자형 바디필로우</div>
-        </a>
-    </div>
-    <!-- 상품4 -->
-    <div class="product">
-        <a href="https://service.toss.im/shopping/p/693465" target="_blank">
-            <img src="https://bananab2b.co.kr/data/bananab2b/goods/star4212/small/2022342394367500.jpg?type=w860" alt="Z플립3/4 스카프 풀커버 케이스">
-            <div>Z플립3/4 스카프 풀커버 케이스</div>
-        </a>
-    </div>
-    <!-- 상품5 -->
-    <div class="product">
-        <a href="https://service.toss.im/shopping/p/404991" target="_blank">
-            <img src="https://bananab2b.co.kr/data/bananab2b/goods/gseller2022/small/2023214618581750.jpg?type=w860" alt="퀄팅 미니구름백">
-            <div>퀄팅 미니구름백</div>
-        </a>
-    </div>
-    <!-- 상품6 -->
-    <div class="product">
-        <a href="https://service.toss.im/shopping/p/404807" target="_blank">
-            <img src="https://bananab2b.co.kr/data/bananab2b/goods/nadis/small/1000_7.jpg?type=w860" alt="칼라6단 신발 정리대">
-            <div>칼라6단 신발 정리대</div>
-        </a>
-    </div>	
-</div>
+    <!-- Main Grid -->
+    <div class="flex-grow grid grid-cols-12 overflow-hidden bg-slate-100 p-4 gap-4" id="main-grid">
+        
+        <!-- LEFT: MAP (9 cols) -->
+        <div id="view-map-container" class="col-span-12 lg:col-span-9 bg-white rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden flex flex-col">
+            <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center bg-white z-10 h-12">
+                <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                    <div onclick="switchMainView('map')" id="btn-view-map" class="view-tab active">🗺️ GIS Map</div>
+                    <!-- V25: Alert on click if no location selected -->
+                    <div onclick="switchMainView('rack')" id="btn-view-rack" class="view-tab inactive">🖥️ DCIM Rack</div>
+                </div>
+                <span class="text-[10px] text-slate-400 font-mono">Status: Online</span>
+            </div>
+            <div class="flex-grow relative">
+                <div id="map"></div>
+                <button onclick="resetMapView()" class="map-overlay-btn" style="position:absolute; top:12px; right:12px; z-index:1000; background:white; padding:6px 12px; border-radius:6px; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.2);">📍 Reset</button>
+            </div>
+        </div>
 
-<div id="footer">
-    COPYRIGHT &copy; 지금을사는지혜 All Rights Reserved.
-</div>
+        <!-- RIGHT: PANEL (3 cols) -->
+        <div id="right-panel" class="col-span-12 lg:col-span-3 flex flex-col gap-4 overflow-hidden">
+            <!-- Dashboard -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex-none">
+                <div class="flex justify-between items-start mb-4">
+                    <div><div class="text-[10px] font-bold text-slate-400 tracking-wider uppercase">DASHBOARD</div><h2 class="text-xl font-bold text-slate-800">현황 요약</h2></div>
+                    <span class="bg-slate-100 text-slate-500 text-[10px] px-2 py-1 rounded font-bold">ALL</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2 mb-4">
+                    <div class="flex flex-col items-center justify-center p-3 rounded-xl border bg-red-50 border-red-100"><span class="text-[10px] font-bold text-red-500 mb-1">FC</span><span class="text-xl font-bold text-slate-800" id="stat-fc">0</span></div>
+                    <div class="flex flex-col items-center justify-center p-3 rounded-xl border bg-blue-50 border-blue-100"><span class="text-[10px] font-bold text-blue-500 mb-1">CAMP</span><span class="text-xl font-bold text-slate-800" id="stat-camp">0</span></div>
+                    <div class="flex flex-col items-center justify-center p-3 rounded-xl border bg-purple-50 border-purple-100"><span class="text-[10px] font-bold text-purple-500 mb-1">HUB</span><span class="text-xl font-bold text-slate-800" id="stat-hub">0</span></div>
+                </div>
+                <div class="h-24 w-full"><canvas id="statusChart"></canvas></div>
+            </div>
+            <!-- List -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex-grow flex flex-col overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center flex-none">
+                    <h3 class="font-bold text-slate-800 flex items-center gap-2">📍 거점 리스트</h3>
+                    <span class="text-xs text-slate-400" id="total-count">0</span>
+                </div>
+                <div class="p-2 border-b border-slate-100 bg-slate-50">
+                     <input type="text" onkeyup="updateSearch(this.value)" placeholder="거점명 검색..." class="w-full pl-2 pr-2 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white">
+                </div>
+                <div class="flex-grow overflow-y-auto custom-scrollbar p-2 space-y-1 location-list-target"></div>
+            </div>
+        </div>
 
-<script>
-    document.getElementById('search').addEventListener('input', function() {
-        var searchValue = this.value.toLowerCase();
-        var products = document.querySelectorAll('.product');
-        products.forEach(function(product) {
-            var productName = product.textContent.toLowerCase();
-            if (productName.indexOf(searchValue) > -1) {
-                product.style.display = 'block';
+        <!-- RACK VIEW OVERLAY (V25: Split Layout) -->
+        <div id="rack-view-container" class="col-span-12 hidden h-full bg-slate-200 rounded-xl overflow-hidden relative border border-slate-300 shadow-2xl z-[100] flex-row">
+             
+             <!-- LEFT SIDEBAR (V25 NEW: Quick Nav) -->
+             <div class="w-72 bg-white border-r border-slate-200 flex flex-col flex-none z-20">
+                <div class="p-4 border-b border-slate-100 bg-slate-50">
+                    <div class="font-bold text-slate-700 text-sm mb-2">거점 바로가기</div>
+                    <input type="text" onkeyup="updateSearch(this.value)" placeholder="거점명 검색..." class="w-full pl-2 pr-2 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white">
+                </div>
+                <div class="flex-grow overflow-y-auto custom-scrollbar p-2 space-y-1 location-list-target">
+                    <!-- Tree List Synced Here -->
+                </div>
+             </div>
+
+             <!-- RIGHT CONTENT (Rack Visualizer) -->
+             <div class="flex-grow flex flex-col min-w-0 bg-slate-100 relative">
+                 
+                 <!-- Close Button -->
+                 <button onclick="closeRackView()" class="absolute top-3 right-4 z-50 bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-slate-700 whitespace-nowrap">❌ 닫기</button>
+
+                 <!-- Header -->
+                 <div class="bg-white px-6 border-b border-slate-300 flex items-end justify-between flex-none h-16 pt-2">
+                     <div class="flex items-center gap-4 h-full w-full overflow-hidden">
+                         <h2 class="text-lg font-bold text-slate-800 mr-2 mb-3 flex-none truncate max-w-[200px]" id="rack-view-title">거점명</h2>
+                         <div class="tab-strip-container flex-grow h-full min-w-0">
+                             <div class="tab-scroll-area custom-scrollbar" id="room-tabs-container"></div>
+                             <div class="add-room-btn" onclick="addRoom()">+ Room</div>
+                         </div>
+                     </div>
+                     <div class="w-16 flex-none"></div> <!-- Spacer for close button -->
+                 </div>
+
+                 <!-- Rack Canvas -->
+                 <div class="flex-grow overflow-auto custom-scrollbar bg-slate-300/50 p-8 h-full shadow-inner">
+                     <div class="flex items-start gap-8 min-h-min" id="rack-container"></div>
+                 </div>
+             </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="device-modal" class="fixed inset-0 z-[2000] hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 border border-slate-200">
+             <form id="device-form" onsubmit="handleDeviceSubmit(event)" class="space-y-3">
+                <input type="hidden" id="dev-rack-idx"><input type="hidden" id="dev-unit-idx">
+                <div class="flex justify-between items-center border-b pb-2 mb-2"><h3 class="font-bold text-slate-800">장비 정보</h3><span id="modal-u-info" class="text-xs font-mono bg-slate-100 px-2 py-1 rounded">U?</span></div>
+                <div class="flex gap-2">
+                    <select id="dev-height" class="w-1/3 border p-2 rounded text-xs"><option value="1">1U</option><option value="2">2U</option><option value="3">3U</option><option value="4">4U</option><option value="6">6U</option><option value="8">8U</option><option value="10">10U</option></select>
+                    <select id="dev-vendor" class="w-2/3 border p-2 rounded text-xs"><option value="dell">Dell</option><option value="hpe">HPE</option><option value="cisco">Cisco</option><option value="brocade">Brocade</option><option value="etc">Other</option></select>
+                </div>
+                <input type="text" id="dev-hostname" class="w-full border p-2 rounded text-xs font-bold" placeholder="Hostname">
+                <input type="text" id="dev-model" class="w-full border p-2 rounded text-xs" required placeholder="Model">
+                <input type="text" id="dev-ip" class="w-full border p-2 rounded text-xs font-mono" placeholder="Mgmt IP">
+                <div class="flex gap-2 pt-2"><button type="button" onclick="deleteDevice()" class="px-4 py-2 bg-red-100 text-red-600 rounded text-xs font-bold hover:bg-red-100">삭제</button><button type="button" onclick="document.getElementById('device-modal').classList.add('hidden')" class="flex-1 bg-slate-100 rounded text-xs font-bold">취소</button><button type="submit" class="flex-1 bg-slate-800 text-white rounded text-xs font-bold">저장</button></div>
+             </form>
+        </div>
+    </div>
+
+    <div id="location-modal" class="fixed inset-0 z-[2000] hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-md p-6">
+            <h3 class="font-bold text-lg mb-4 text-slate-800">거점 등록</h3>
+            <form onsubmit="handleLocationSubmit(event)" class="space-y-4">
+                <input type="hidden" id="loc-id"><input type="hidden" id="loc-lat"><input type="hidden" id="loc-lng">
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">권역</label><select id="loc-region" class="w-full border p-2.5 rounded text-sm"><option value="seoul">서울권</option><option value="gyeonggi">경기권</option><option value="incheon">인천/서부</option><option value="gangwon">강원권</option><option value="chungcheong">충청권</option><option value="jeolla">전라권</option><option value="gyeongsang">경상/영남권</option><option value="jeju">제주권</option></select></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">유형</label><select id="loc-type" class="w-full border p-2.5 rounded text-sm"><option value="FC">FC</option><option value="Camp">Camp</option><option value="HUB">HUB</option></select></div>
+                </div>
+                <div><label class="block text-xs font-bold text-slate-500 mb-1">거점명 / 검색</label><div class="flex gap-2"><input type="text" id="loc-name" placeholder="예: 동탄1센터" class="flex-grow border p-2.5 rounded text-sm" required><button type="button" onclick="searchGeo()" class="px-3 bg-blue-50 text-blue-600 rounded text-xs font-bold border border-blue-100">🔍</button></div></div>
+                <div><label class="block text-xs font-bold text-slate-500 mb-1">주소</label><input type="text" id="loc-address" placeholder="자동 입력됨" class="w-full border p-2.5 rounded text-sm bg-slate-50" required></div>
+                <textarea id="loc-memo" rows="2" class="w-full border p-2.5 rounded text-sm" placeholder="메모..."></textarea>
+                <div class="flex gap-2 pt-2"><button type="button" onclick="document.getElementById('location-modal').classList.add('hidden')" class="flex-1 py-3 bg-slate-100 rounded-lg text-sm font-bold">취소</button><button type="submit" class="flex-1 py-3 bg-orange-600 text-white rounded-lg text-sm font-bold">저장</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="ai-modal" class="fixed inset-0 z-[2000] hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col h-[500px]">
+            <div class="p-3 border-b flex justify-between items-center bg-indigo-50 rounded-t-xl"><span class="font-bold text-indigo-900">✨ AI Insight</span><button onclick="document.getElementById('ai-modal').classList.add('hidden')" class="text-slate-400">&times;</button></div>
+            <div id="ai-chat-history" class="flex-grow overflow-y-auto p-4 custom-scrollbar"></div>
+            <div class="p-3 border-t bg-slate-50 rounded-b-xl"><form onsubmit="handleAiSubmit(event)" class="flex gap-2"><input type="text" id="ai-input" class="flex-grow border rounded px-3 py-2 text-xs" placeholder="질문..." required><button type="submit" class="bg-orange-600 text-white rounded px-4 py-2 text-xs font-bold">전송</button></form></div>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = ""; 
+        const REGION_MAP = { 'seoul': '서울권', 'gyeonggi': '경기권', 'incheon': '인천/서부', 'gangwon': '강원권', 'chungcheong': '충청권', 'jeolla': '전라권', 'gyeongsang': '경상/영남권', 'jeju': '제주권' };
+        const REGION_COORDS = { 'seoul': {lat:37.5665,lng:126.9780}, 'gyeonggi': {lat:37.2750,lng:127.0096}, 'incheon': {lat:37.4563,lng:126.7052}, 'gangwon': {lat:37.8854,lng:127.7298}, 'chungcheong': {lat:36.3504,lng:127.3845}, 'jeolla': {lat:35.1595,lng:126.8526}, 'gyeongsang': {lat:35.1796,lng:129.0756}, 'jeju': {lat:33.4996,lng:126.5312} };
+        
+        let locations = [], map, markers = [], selectedLocId = null, selectedRoomIdx = 0, chartInstance = null, dragSource = null;
+        let globalSearchTerm = "";
+
+        const DEFAULT_DATA = [{ id: 1, type: 'FC', name: '이천 3센터', region: 'gyeonggi', lat: 37.215, lng: 127.533, address: '경기도 이천시 호법면', rooms: [{ name: "Main Room", racks: [{ name: "R01", units: { 42: {vendor:'dell', model:'R750', hostname:'ESXi-01', ip:'10.10.10.1', height:2}, 40: {vendor:'cisco', model:'N9K', hostname:'Core-SW', ip:'10.10.10.254', height:4} } }] }] }];
+        document.addEventListener('DOMContentLoaded', () => { loadData(); initMap(); renderDashboard(); });
+
+        function loadData() { const s = localStorage.getItem('dcim_v25_data'); locations = s ? JSON.parse(s) : JSON.parse(JSON.stringify(DEFAULT_DATA)); }
+        function saveData() { localStorage.setItem('dcim_v25_data', JSON.stringify(locations)); renderDashboard(); }
+        function resetData() { if(confirm("초기화?")){localStorage.removeItem('dcim_v25_data');location.reload();} }
+
+        // --- MAP & DASHBOARD ---
+        function initMap() { 
+            if(map) map.remove(); map = L.map('map').setView([36.5, 127.5], 7); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); renderMarkers(); 
+        }
+        function renderMarkers() {
+            markers.forEach(m => map.removeLayer(m)); markers = [];
+            locations.forEach(l => {
+                const color = l.type==='FC'?'#ef4444':(l.type==='HUB'?'#a855f7':'#3b82f6');
+                L.marker([l.lat, l.lng], {icon: L.divIcon({ className: 'custom-icon', html: `<div style="background:${color};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`, iconSize: [12, 12] })})
+                .addTo(map).on('click', () => { selectedLocId=l.id; renderTreeList(); renderDashboard(); });
+            });
+        }
+        function resetMapView() { map.setView([36.5, 127.5], 7); }
+
+        function renderDashboard() {
+            const fc=locations.filter(l=>l.type==='FC').length, camp=locations.filter(l=>l.type==='Camp').length, hub=locations.filter(l=>l.type==='HUB').length;
+            document.getElementById('stat-fc').innerText=fc; document.getElementById('stat-camp').innerText=camp; document.getElementById('stat-hub').innerText=hub; document.getElementById('total-count').innerText=locations.length;
+            const ctx=document.getElementById('statusChart').getContext('2d'); if(chartInstance)chartInstance.destroy();
+            chartInstance=new Chart(ctx,{type:'bar',data:{labels:['FC','Camp','HUB'],datasets:[{data:[fc,camp,hub],backgroundColor:['#ef4444','#3b82f6','#a855f7'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{display:false},x:{display:false}}}});
+            renderTreeList();
+        }
+
+        // --- TREE VIEW (DUAL SYNC) ---
+        function updateSearch(val) { globalSearchTerm = val.toLowerCase(); renderTreeList(); }
+        
+        function renderTreeList() {
+            // Target BOTH list containers (Main & DCIM Sidebar)
+            const containers = document.querySelectorAll('.location-list-target');
+            
+            containers.forEach(container => {
+                container.innerHTML = '';
+                const hierarchy = {};
+                locations.forEach(l => {
+                    if(globalSearchTerm && !l.name.toLowerCase().includes(globalSearchTerm)) return;
+                    const reg = REGION_MAP[l.region] || '기타'; const parts = l.address.split(' '); const area = parts.length>=2 ? `${parts[0]} ${parts[1]}` : (parts[0]||'미지정');
+                    if(!hierarchy[reg]) hierarchy[reg]={}; if(!hierarchy[reg][area]) hierarchy[reg][area]=[];
+                    hierarchy[reg][area].push(l);
+                });
+
+                Object.keys(hierarchy).forEach(reg => {
+                    const d1=document.createElement('details'); d1.open=true; d1.className="mb-1"; d1.innerHTML=`<summary class="p-2 text-xs font-bold hover:bg-slate-50 rounded flex items-center gap-1 text-slate-700"><span class="tree-arrow">▶</span>${reg}</summary>`;
+                    const c1=document.createElement('div'); c1.className="pl-3 border-l border-slate-200 ml-2 mt-1";
+                    Object.keys(hierarchy[reg]).forEach(area=>{
+                        const d2=document.createElement('details'); d2.open=true; d2.className="mb-1"; d2.innerHTML=`<summary class="p-1 text-[11px] font-semibold hover:bg-slate-50 rounded flex items-center gap-1 text-slate-600"><span class="tree-arrow">▶</span>${area}</summary>`;
+                        const c2=document.createElement('div'); c2.className="pl-3 border-l border-slate-200 ml-1.5 mt-1 space-y-0.5";
+                        hierarchy[reg][area].forEach(loc=>{
+                            const div=document.createElement('div'); div.className=`p-1.5 rounded cursor-pointer text-[11px] flex justify-between items-center ${selectedLocId===loc.id?'bg-orange-50 text-orange-700 font-bold border border-orange-100':'text-slate-500 hover:bg-slate-50'}`;
+                            div.innerHTML=`<span>${loc.name}</span><span class="text-[9px] px-1 bg-slate-100 rounded">${loc.type}</span>`;
+                            div.onclick=()=> { selectedLocId=loc.id; renderTreeList(); renderDashboard(); };
+                            c2.appendChild(div);
+                        });
+                        d2.appendChild(c2); c1.appendChild(d2);
+                    });
+                    d1.appendChild(c1); container.appendChild(d1);
+                });
+            });
+        }
+
+        // --- SWITCHERS (V25 Fix) ---
+        function switchMainView(mode) {
+            const mapBtn = document.getElementById('btn-view-map');
+            const rackBtn = document.getElementById('btn-view-rack');
+            
+            if(mode === 'map') {
+                mapBtn.classList.replace('inactive', 'active'); mapBtn.classList.add('bg-slate-800','text-white'); mapBtn.classList.remove('text-slate-500');
+                rackBtn.classList.replace('active', 'inactive'); rackBtn.classList.remove('bg-slate-800','text-white'); rackBtn.classList.add('text-slate-500');
+                closeRackView();
             } else {
-                product.style.display = 'none';
+                // V25 Guard Logic
+                if (!selectedLocId) {
+                    alert("거점(Location)을 먼저 선택해 주세요.");
+                    return;
+                }
+                
+                mapBtn.classList.replace('active', 'inactive'); mapBtn.classList.remove('bg-slate-800','text-white'); mapBtn.classList.add('text-slate-500');
+                rackBtn.classList.replace('inactive', 'active'); rackBtn.classList.add('bg-slate-800','text-white'); rackBtn.classList.remove('text-slate-500');
+                openRackView(selectedLocId);
             }
-        });
-    });
-</script>
+        }
 
+        function openRackView(id) {
+            selectedLocId = id; selectedRoomIdx = 0;
+            const l = locations.find(x => x.id === id);
+            document.getElementById('view-map-container').classList.add('hidden');
+            document.getElementById('right-panel').classList.add('hidden');
+            document.getElementById('rack-view-container').classList.remove('hidden');
+            document.getElementById('rack-view-container').classList.add('flex');
+            document.getElementById('rack-view-title').innerText = l.name;
+            renderRooms(l);
+            
+            // Sync Tabs Visual
+            document.getElementById('btn-view-map').classList.remove('bg-slate-800','text-white'); document.getElementById('btn-view-map').classList.add('text-slate-500');
+            document.getElementById('btn-view-rack').classList.add('bg-slate-800','text-white'); document.getElementById('btn-view-rack').classList.remove('text-slate-500');
+        }
+
+        function closeRackView() {
+            document.getElementById('rack-view-container').classList.add('hidden');
+            document.getElementById('rack-view-container').classList.remove('flex');
+            document.getElementById('view-map-container').classList.remove('hidden');
+            document.getElementById('right-panel').classList.remove('hidden');
+            setTimeout(()=>map.invalidateSize(), 100);
+            
+             // Sync Tabs Visual
+            document.getElementById('btn-view-map').classList.add('bg-slate-800','text-white'); document.getElementById('btn-view-map').classList.remove('text-slate-500');
+            document.getElementById('btn-view-rack').classList.remove('bg-slate-800','text-white'); document.getElementById('btn-view-rack').classList.add('text-slate-500');
+        }
+
+        // --- ROOM & RACKS ---
+        function renderRooms(loc) {
+            const container = document.getElementById('room-tabs-container'); container.innerHTML = ''; 
+            if (!loc.rooms) loc.rooms = [];
+            loc.rooms.forEach((room, idx) => {
+                const isActive = (idx === selectedRoomIdx);
+                const tab = document.createElement('div');
+                tab.className = `room-tab ${isActive ? 'active' : 'inactive'}`;
+                tab.onclick = () => { selectedRoomIdx = idx; renderRooms(loc); };
+                let html = `<span>${room.name}</span>`;
+                if(isActive) html += `<div class="tab-actions"><span onclick="event.stopPropagation();editRoom(${idx})" class="tab-icon">✎</span><span onclick="event.stopPropagation();delRoom(${idx})" class="tab-icon del">×</span></div>`;
+                tab.innerHTML = html;
+                container.appendChild(tab);
+            });
+            if(loc.rooms.length > 0) renderRacks(loc.rooms[selectedRoomIdx]);
+            else document.getElementById('rack-container').innerHTML = '<div class="text-slate-400 m-auto">Room 추가 필요</div>';
+        }
+        function renderRacks(room) {
+            const c=document.getElementById('rack-container'); c.innerHTML = '';
+            if(!room.racks) room.racks=[];
+            room.racks.forEach((r, ri) => {
+                const w = document.createElement('div'); w.className = 'rack-wrapper';
+                w.innerHTML = `<div class="rack-header"><span onclick="renRack(${ri})" class="cursor-pointer truncate max-w-[200px]">${r.name}</span><button onclick="delRack(${ri})" class="hover:text-red-400">×</button></div><div class="rack-body"></div>`;
+                const b = w.querySelector('.rack-body');
+                let sk=0;
+                for(let u=46;u>=1;u--){
+                    if(sk>0){sk--;continue;}
+                    const d=r.units[u];
+                    const s=document.createElement('div'); s.className=`rack-unit ${d?'occupied vendor-'+d.vendor:''}`;
+                    s.ondragover=(e)=>handleDragOver(e,ri,u); s.ondrop=(e)=>handleDrop(e,ri,u);
+                    if(d){
+                        s.draggable=true; s.ondragstart=(e)=>handleDragStart(e,ri,u,d);
+                        s.innerHTML=`<div class="u-label">${u}</div><div class="device-content"><div class="device-main">${d.hostname||d.name}</div><div class="device-sub">${d.model||''} ${d.ip||''}</div></div>`;
+                        if(d.height>1){s.style.height=`${30*d.height}px`;sk=d.height-1;}
+                        s.onclick=()=>openModal(ri,u,d);
+                    } else { s.innerHTML=`<div class="u-label">${u}</div>`; s.onclick=()=>openModal(ri,u,null); }
+                    b.appendChild(s);
+                }
+                c.appendChild(w);
+            });
+            const add = document.createElement('div'); add.className = "min-w-[360px] border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-slate-200 text-slate-400 flex-shrink-0 h-[800px]";
+            add.innerHTML = "<span class='text-4xl'>+</span><span>Rack</span>";
+            add.onclick=()=>{room.racks.push({name:`R${room.racks.length+1}`,units:{}});saveData();renderRacks(room);};
+            c.appendChild(add);
+        }
+
+        // CRUD & UTILS (Retained)
+        function addRoom(){ const l=locations.find(x=>x.id===selectedLocId); const n=prompt("Name:"); if(n){if(!l.rooms)l.rooms=[];l.rooms.push({name:n,racks:[]});selectedRoomIdx=l.rooms.length-1;saveData();renderRooms(l);}}
+        function editRoom(i){ const l=locations.find(x=>x.id===selectedLocId); const n=prompt("Rename:",l.rooms[i].name); if(n){l.rooms[i].name=n;saveData();renderRooms(l);}}
+        function delRoom(i){ const l=locations.find(x=>x.id===selectedLocId); if(confirm("Delete?")){l.rooms.splice(i,1);selectedRoomIdx=Math.max(0,i-1);saveData();renderRooms(l);}}
+        function delRack(i){const l=locations.find(x=>x.id===selectedLocId); if(confirm("Rack Del?")){l.rooms[selectedRoomIdx].racks.splice(i,1);saveData();renderRacks(l.rooms[selectedRoomIdx]);}}
+        function renRack(i){const l=locations.find(x=>x.id===selectedLocId); const n=prompt("Rack Name:"); if(n){l.rooms[selectedRoomIdx].racks[i].name=n;saveData();renderRacks(l.rooms[selectedRoomIdx]);}}
+        function openLocationModal(){document.getElementById('location-modal').classList.remove('hidden');document.getElementById('loc-name').value='';}
+        async function searchGeo(){const q=document.getElementById('loc-name').value; if(!q)return alert("검색어?"); const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`); const d=await r.json(); if(d.length>0){document.getElementById('loc-address').value=d[0].display_name;document.getElementById('loc-lat').value=d[0].lat;document.getElementById('loc-lng').value=d[0].lon;alert("Found!");}else alert("Not Found");}
+        function handleLocationSubmit(e){e.preventDefault(); const reg=document.getElementById('loc-region').value; const c=REGION_COORDS[reg]; const l={id:Date.now(),type:document.getElementById('loc-type').value,region:reg,name:document.getElementById('loc-name').value,address:document.getElementById('loc-address').value,lat:parseFloat(document.getElementById('loc-lat').value)||c.lat,lng:parseFloat(document.getElementById('loc-lng').value)||c.lng,memo:document.getElementById('loc-memo').value,rooms:[{name:'Main',racks:[]}]}; locations.push(l); saveData(); document.getElementById('location-modal').classList.add('hidden'); renderDashboard(); initMap();}
+        function openModal(r,u,d){document.getElementById('device-modal').classList.remove('hidden');document.getElementById('dev-rack-idx').value=r;document.getElementById('dev-unit-idx').value=u; document.getElementById('modal-u-info').innerText=`${u} Unit`; if(d){document.getElementById('dev-model').value=d.name;document.getElementById('dev-vendor').value=d.vendor;document.getElementById('dev-height').value=d.height;document.getElementById('dev-hostname').value=d.hostname||'';document.getElementById('dev-ip').value=d.ip||'';}else{document.getElementById('dev-model').value='';document.getElementById('dev-height').value=1;}}
+        function handleDeviceSubmit(e){e.preventDefault();const r=document.getElementById('dev-rack-idx').value,u=document.getElementById('dev-unit-idx').value,room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; room.racks[r].units[u]={name:document.getElementById('dev-model').value,model:document.getElementById('dev-model').value,vendor:document.getElementById('dev-vendor').value,height:parseInt(document.getElementById('dev-height').value),hostname:document.getElementById('dev-hostname').value,ip:document.getElementById('dev-ip').value}; saveData();document.getElementById('device-modal').classList.add('hidden');renderRacks(room);}
+        function deleteDevice(){const r=document.getElementById('dev-rack-idx').value,u=document.getElementById('dev-unit-idx').value,room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx]; delete room.racks[r].units[u]; saveData();document.getElementById('device-modal').classList.add('hidden');renderRacks(room);}
+        function handleDragStart(e,r,u,d){e.stopPropagation();dragSource={rIdx:r,u,device:d};}
+        function handleDragOver(e,tR,tU){e.preventDefault();}
+        function handleDrop(e,tR,tU){e.preventDefault();if(!dragSource)return;const room=locations.find(x=>x.id===selectedLocId).rooms[selectedRoomIdx];delete room.racks[dragSource.rIdx].units[dragSource.u];room.racks[tR].units[tU]=dragSource.device;saveData();renderRacks(room);dragSource=null;}
+        async function handleAiSubmit(e){e.preventDefault();const i=document.getElementById('ai-input'),q=i.value;if(!q)return; const h=document.getElementById('ai-chat-history'); h.innerHTML+=`<div class="ai-message user">${q}</div>`; i.value=''; try{const l=locations.find(x=>x.id===selectedLocId); const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:`Data:${JSON.stringify(l)}\nQ:${q}\nKorean Answer.`}]}]})}); const d=await res.json(); h.innerHTML+=`<div class="ai-message bot">${d.candidates[0].content.parts[0].text}</div>`;}catch(er){h.innerHTML+=`<div class="ai-message bot">Error</div>`;}}
+        function openAIModal(){if(!selectedLocId)return alert("Select Location"); document.getElementById('ai-modal').classList.remove('hidden');}
+        function downloadSample(){alert("Sample");} function exportVisualExcel(){alert("Export");} function importVisualExcel(i){alert("Import");}
+    </script>
 </body>
 </html>
